@@ -21,6 +21,8 @@ powershell -File "<Info-Hub路径>\ops\deploy\windows.ps1" -RepositoryPath "<Inf
 
 准备脚本只支持指定主机上的 OpenCloudOS 9 x86_64，不删除软件，不修改 Docker daemon 配置、不关闭 SELinux 或防火墙，也不重启现有站点、数据库、Nginx。若发现已运行的非 Docker containerd 或冲突安装，会停止供排查。软件安装中途失败不自动卸载已装组件；核对错误后可重跑。GitHub 下载失败时保留输出，不能跳过校验或关闭 TLS 验证。
 
+Windows PowerShell 通过原生进程管道发送文本时会附加 CRLF，即使源 Shell 文件是 LF。部署工具在服务端统一移除实际回车字符，再交给 Bash，覆盖环境准备、预检和部署三阶段。已安装 Docker 和插件后，普通部署命令即可继续；无需重复安装。`-PrepareDocker` 保留为需要时可重跑的环境准备选项。
+
 发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
 
 成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。
