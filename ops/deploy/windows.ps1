@@ -2,7 +2,8 @@
 param(
   [Parameter(Mandatory=$true)][string]$RepositoryPath,
   [string]$SshDirectory = "$env:USERPROFILE\.ssh",
-  [switch]$PreflightOnly
+  [switch]$PreflightOnly,
+  [switch]$PrepareDocker
 )
 $ErrorActionPreference = 'Stop'
 $RepositoryPath = (Resolve-Path $RepositoryPath).Path
@@ -12,6 +13,12 @@ if (!(Test-Path $key) -or !(Test-Path $known)) { throw 'SSH key and the supplied
 # Do not execute settings from the uploaded SSH config. The host and ports are fixed.
 $sshOptions = @('-F','NUL','-i',$key,'-o','IdentitiesOnly=yes','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o',"UserKnownHostsFile=$known",'-o','ConnectTimeout=15')
 $target = 'root@43.128.10.41'
+if ($PrepareDocker) {
+  $prepareScript = Join-Path $RepositoryPath 'ops\deploy\prepare-docker.sh'
+  Write-Host 'Preparing Docker and CLI plugins on the OpenCloudOS server...'
+  Get-Content -Raw $prepareScript | & ssh @sshOptions -p 22 $target 'bash -s'
+  if ($LASTEXITCODE -ne 0) { throw "Docker preparation failed (SSH exit code $LASTEXITCODE). See the preceding output; site deployment has not started." }
+}
 $serverScript = Join-Path $RepositoryPath 'ops\deploy\server.sh'
 # Read-only inspection first, before creating a release or changing server files.
 Write-Host 'Connecting to the server for read-only preflight...'

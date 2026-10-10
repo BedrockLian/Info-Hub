@@ -17,6 +17,10 @@ powershell -File "<Info-Hub路径>\ops\deploy\windows.ps1" -RepositoryPath "<Inf
 
 预检失败时，保留从 `Connecting to the server` 开始的输出。脚本逐项报告服务器身份、Docker Compose、Docker 守护进程、站点配置与证书、Nginx 配置；失败后不上传发布包，也不修改服务。仅排查时在上述 PowerShell 命令末尾加 `-PreflightOnly`，即使预检成功也不会继续部署。
 
+2026-10-10 的服务器只读检查确认系统为 OpenCloudOS 9.6 x86_64，未安装 Docker。该系统可在命令末尾加 `-PrepareDocker`：脚本按 [OpenCloudOS 官方 Docker 文档](https://docs.opencloudos.org/OCS/Virtualization_and_Containers_Guide/Docker_guide/) 从已配置的系统仓库安装 `moby`，保留 RPM 签名验证；仅当插件缺失时安装官方 Compose v5.6.0 和 Buildx v0.38.0，并校验仓库脚本中固定的 SHA-256（来自官方 GitHub release）。随后启动 Docker 并继续预检、部署。加 `-PrepareDocker -PreflightOnly` 则准备 Docker 后止于预检，不发布应用。
+
+准备脚本只支持指定主机上的 OpenCloudOS 9 x86_64，不删除软件，不修改 Docker daemon 配置、不关闭 SELinux 或防火墙，也不重启现有站点、数据库、Nginx。若发现已运行的非 Docker containerd 或冲突安装，会停止供排查。软件安装中途失败不自动卸载已装组件；核对错误后可重跑。GitHub 下载失败时保留输出，不能跳过校验或关闭 TLS 验证。
+
 发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
 
 成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。
