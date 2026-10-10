@@ -4,56 +4,56 @@
 
 export const SITE = {
   /** 站名：导航、页面标题、分享图、RSS、MCP、后台都用它。 */
-  name: "MyHOT",
+  name: "Info-Hub",
   /**
    * 行业词：拼进默认说法里，比如“AI 日报”“AI 动态”。
    * 改成“法律”“HR”“黄金”之类，页面上就会变成“法律日报”“法律动态”。
    */
-  subject: "AI",
+  subject: "情报",
   /** 首页的完整标题（浏览器标签、搜索结果）。 */
-  homeTitle: "MyHOT — AI 行业动态 · 每日精选与日报",
+  homeTitle: "Info-Hub — 个人情报站 · 每日精选与日报",
   /** 一句话介绍：搜索引擎、分享卡片、RSS、llms.txt 会用。 */
-  description: "自动盯住上百个信源，用模型摘要、打分、精选，把同一件事的多篇报道归到一起，每天早上出一份日报。",
+  description: "从少量高质量 RSS 提炼中文摘要与事件脉络，为个人阅读和公共事务研究提供有出处的线索。",
   /** 首页左上角和侧边栏下面的一行小字。 */
-  tagline: "值得关注的 AI 动态",
+  tagline: "国际时事 · 对华报道 · 科技 · 游戏 · 公共事务",
   /** 界面语言（HTML lang、og:locale）。 */
   locale: "zh-CN",
   /** 默认域名，只在没设置 SITE_URL 时使用。 */
   defaultUrl: "http://localhost:3000",
   /**
-   * MCP 工具名的前缀（小写字母、数字、下划线），工具会叫 myhot_get_latest、myhot_search……
+   * MCP 工具名的前缀（小写字母、数字、下划线），工具会叫 infohub_get_latest、infohub_search……
    * 已经有人接入后就不要再改。
    */
-  mcpPrefix: "myhot",
+  mcpPrefix: "infohub",
   /** 对外联系邮箱（选填）：使用规则、llms.txt、响应头里会写。 */
   contactEmail: null as string | null,
   /** 页脚的一行小字（选填）。 */
-  footerNote: "由 AIHOT 开源框架驱动",
+  footerNote: "个人情报站 · 原文版权归来源所有",
   /** 中国大陆网站的 ICP 备案号（选填），填了就显示在页脚并链接到工信部备案系统。 */
   icp: null as string | null,
   /** 结构化数据里的网站运营者（搜索引擎用）。 */
   organization: {
-    name: "MyHOT",
+    name: "Info-Hub",
     /** 创始人（选填）：{ name, url, description }。 */
     founder: null as null | { name: string; url?: string; description?: string },
   },
   /** 抓取信源时报上的名字（User-Agent 里用），不要冒用别的站。 */
-  crawlerName: "MyHOTBot",
+  crawlerName: "Info-HubBot",
 } as const;
 
 /** 关于页的文案。数字（信源数、收录数、精选数、日报期数）来自站内实时统计，不用写在这里。 */
 export const ABOUT = {
   kicker: `关于 ${SITE.name}`,
   /** 大标题：第一行正常颜色，第二行强调色。 */
-  headline: ["AI 圈每天都有新动静，", "值得看的，只有几条。"] as [string, string],
+  headline: ["世界每天都有新动静，", "值得看的，只有几条。"] as [string, string],
   /** 标题下面的一段话。{sources} 会换成实时的信源数。 */
-  lead: `${SITE.name} 替你盯着 {sources} 个信源：抓取、归并、打分、精选，每天早上 8 点出一份日报。免费，不用注册。`,
+  lead: `${SITE.name} 替你盯着 {sources} 个信源：抓取、归并、打分、精选，每天早上 8 点出一份日报。仅限个人使用，阅读和订阅均需认证。`,
   /** 信源河动画下面的四个环节。 */
   steps: {
-    collect: "官方博客、媒体、X 账号、公众号和各类订阅源都在看；活跃的源 15 分钟就看一次。",
-    store: "抓到的都存下来，同一件事的报道归到一起；只计入热度的账号也算在内，热点榜就是从这里算出来的。",
-    select: "模型先看是不是这个行业的事、有没有实际信息，再写中文标题、摘要和推荐理由；营销稿和重复转发进不来。",
-    publish: "每天 08:00 出日报，周一出周报，每月 1 日出月报；最精选的几条可以推到飞书群。",
+    collect: "从经过核验的新闻、调查报道、科技与游戏 RSS 收集材料。",
+    store: "保留来源和时间，同一件事的不同报道归组，方便比较证据和观点。",
+    select: "模型按个人主题和文章内容预筛，再写中文标题、摘要和推荐理由；不确定的立场判断进入待审。",
+    publish: "每天北京时间 08:00 出日报；站点、RSS、API 和 MCP 都需要认证。",
   },
   /**
    * 作者块（选填），null 就不显示。

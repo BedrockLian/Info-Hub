@@ -1,3 +1,4 @@
+import { requestContext, privateSite, contextOf } from "./request-context.ts";
 // Production web server: built client assets, the shared redirect table and SSR. Api-owned paths are
 // proxied to the api process, so one port serves the whole site; a reverse proxy in front may also send
 // them to the api directly.
@@ -50,7 +51,7 @@ async function serveStatic(pathname: string, res: import("node:http").ServerResp
     throw new BadRequest("malformed percent-encoding");
   }
   const file = path.join(CLIENT_DIR, decoded);
-  if (!file.startsWith(CLIENT_DIR)) return false;
+  if (!file.startsWith(CLIENT_DIR + path.sep)) return false;
   const info = await stat(file).catch(() => null);
   if (!info?.isFile()) return false;
   const immutable = pathname.startsWith("/assets/");
@@ -92,7 +93,7 @@ function pageCache(req: import("node:http").IncomingMessage, res: import("node:h
     const outgoing = typeof messageOrHeaders === "string" ? headers : messageOrHeaders;
     for (const [name, value] of Object.entries(outgoing ?? {})) if (value !== undefined) res.setHeader(name, value);
     const cc = String(res.getHeader("Cache-Control") ?? "");
-    if (!publicRead || status !== 200 || res.hasHeader("Set-Cookie") || !cc || /(?:private|no-store)/i.test(cc)) {
+    if (privateSite || !publicRead || status !== 200 || res.hasHeader("Set-Cookie") || !cc || /(?:private|no-store)/i.test(cc)) {
       res.removeHeader("Expires");
       res.setHeader("Cache-Control", "private, no-store");
       res.setHeader("X-Accel-Expires", "0");
@@ -123,6 +124,27 @@ async function handle(req: import("node:http").IncomingMessage, res: import("nod
   const pathname = qi >= 0 ? raw.slice(0, qi) : raw;
   const search = qi >= 0 ? raw.slice(qi) : "";
 
+  // The API owns its own guard. Everything else is checked before redirects, SSR and .data.
+  const publicAsset = /^\/assets\/[A-Za-z0-9_./-]+$/.test(pathname) || ["/favicon.ico","/icon.png","/apple-icon.png","/icon-192.png","/manifest.webmanifest"].includes(pathname);
+  if (publicAsset && (req.method === "GET" || req.method === "HEAD")) {
+    if (await serveStatic(pathname,res)) return;
+    res.writeHead(404,{"Cache-Control":"no-store"});return res.end("Not found");
+  }
+  const login = pathname === "/admin/login" || pathname === "/admin/login.data";
+  if (privateSite && !isApiOwned(pathname) && !publicAsset) {
+    pageCache(req, res);
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    if (!login) {
+      let check: Response;
+      try { check = await fetch(new URL("/api/auth/read-check", API), {headers: contextOf(req).headers, redirect:"manual", signal:AbortSignal.timeout(5000)}); }
+      catch { res.statusCode = 503; return res.end("Authentication unavailable"); }
+      if (check.status !== 204) {
+        res.statusCode = pathname.endsWith(".data") || !["GET","HEAD"].includes(req.method ?? "GET") ? 401 : 302;
+        if (res.statusCode === 302) res.setHeader("Location", `/admin/login?${new URLSearchParams({return:raw})}`);
+        return res.end();
+      }
+    }
+  }
   const decision = resolveRedirect(pathname, search);
   if (decision) {
     for (const [k, v] of Object.entries(decision.headers)) res.setHeader(k, v);
@@ -149,8 +171,8 @@ async function handle(req: import("node:http").IncomingMessage, res: import("nod
   }
 
   if ((req.method === "GET" || req.method === "HEAD") && pathname.includes(".") && (await serveStatic(pathname, res))) return;
-  pageCache(req, res);
-  return ssr(req, res);
+  if (!privateSite || publicAsset) pageCache(req, res);
+  return requestContext.run(contextOf(req), () => ssr(req, res));
 }
 
 process.on("unhandledRejection", (reason) => {

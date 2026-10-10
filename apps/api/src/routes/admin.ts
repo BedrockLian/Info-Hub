@@ -1,3 +1,4 @@
+import { modelBudgetStatus } from "@aihot/backend/admin/settings";
 // /api/admin/*: queries are GET, creation POST, edits PATCH, business commands POST.
 // Every route goes through adminHandler (session + CSRF); manual changes are audited in the modules.
 import { readFile } from "node:fs/promises";
@@ -105,7 +106,7 @@ export function registerAdmin(app: FastifyInstance) {
   app.post("/api/admin/monitor/posts/:id/resolve", adminHandler(async (req, reply, admin) => orNotFound(req, reply, await resolveMonitorPost(param(req, "id"), body(req) as never, actorOf(admin)))));
 
   // Settings
-  app.get("/api/admin/settings", adminHandler(async () => ({ contact: await loadContact(), targets: await listTargets(), budgets: await listBudgets() })));
+  app.get("/api/admin/settings", adminHandler(async () => ({ contact: await loadContact(), targets: await listTargets(), budgets: await listBudgets(), modelBudget: await modelBudgetStatus() })));
   app.post("/api/admin/settings/contact-qr", adminHandler(async (req, _reply, admin) => {
     const b = body<{ slot: "wechatQr" | "feishuQr"; image: string }>(req);
     return replaceContactQr({ slot: b.slot, data: decodeImage(b.image) }, actorOf(admin));

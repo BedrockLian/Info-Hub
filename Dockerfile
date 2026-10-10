@@ -16,7 +16,10 @@ COPY apps/worker/package.json apps/worker/
 COPY packages/backend/package.json packages/backend/
 COPY packages/contracts/package.json packages/contracts/
 COPY industry/package.json industry/
-RUN npm ci --no-audit --no-fund ${NPM_REGISTRY:+--registry=$NPM_REGISTRY}
+# Optional build-only CA for managed workspaces with a HTTPS inspection proxy.
+RUN --mount=type=secret,id=build_ca \
+    if [ -s /run/secrets/build_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/build_ca; fi; \
+    npm ci --no-audit --no-fund ${NPM_REGISTRY:+--registry=$NPM_REGISTRY}
 COPY . .
 RUN npm run build -w @aihot/web && npm prune --omit=dev --no-audit --no-fund
 

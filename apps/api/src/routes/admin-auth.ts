@@ -1,3 +1,5 @@
+import { readAuthorized, listReadTokens, createReadToken, revokeReadToken } from "@aihot/backend/private/access";
+import { actorOf, audit } from "@aihot/backend/admin/auth";
 // Admin sign-in and the /api/admin guard. Public routes never read the session.
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { config } from "@aihot/backend/config";
@@ -50,7 +52,7 @@ export function adminHandler(fn: AdminHandler) {
     reply.header("Cache-Control", "no-store");
     const admin = await sessionPrincipal(req.headers.cookie);
     if (!admin) return sendProblem(req, reply, { status: 401, code: "unauthorized", detail: "Sign in to the admin first." });
-    if (req.method !== "GET" && req.method !== "HEAD" && req.headers["x-csrf-token"] !== admin.csrf) {
+    if (req.method !== "GET" && req.method !== "HEAD" && (req.headers["x-csrf-token"] ?? (req.url.split("?")[0] === "/api/auth/logout" ? (req.body as Record<string,string> | null)?.csrf : undefined)) !== admin.csrf) {
       return sendProblem(req, reply, { status: 403, code: "forbidden", detail: "Missing or stale CSRF token." });
     }
     try {
@@ -127,11 +129,28 @@ export function registerAdminAuth(app: FastifyInstance) {
     return reply.code(admin && !admin.dev ? 204 : 401).send();
   });
 
-  app.post("/api/auth/logout", async (req, reply) => {
+  app.post("/api/auth/logout", adminHandler(async (req, reply, admin) => {
+    const supplied = req.headers["x-csrf-token"] ?? (req.body as Record<string, string> | null)?.csrf;
+    if (supplied !== admin.csrf) return sendProblem(req, reply, {status:403,code:"forbidden",detail:"Missing CSRF token."});
     await endSession(req.headers.cookie);
     reply.header("Set-Cookie", cookie(SESSION_COOKIE, "", 0, secure())).header("Cache-Control", "no-store");
     return reply.redirect("/", 303);
-  });
+  }));
+
+  app.get("/api/auth/read-check", async (req, reply) => reply.code(await readAuthorized(req.headers.cookie, req.headers.authorization) ? 204 : 401).send());
+  app.get("/api/admin/read-tokens", adminHandler(async () => listReadTokens()));
+  app.post("/api/admin/read-tokens", adminHandler(async (req, _reply, admin) => {
+    const b = (req.body ?? {}) as {name?: string; days?: number};
+    const result = await createReadToken(String(b.name ?? ""), Number(b.days ?? 30), actorOf(admin));
+    await audit(actorOf(admin), "read-token.create", String(result.id), null, null, {name:b.name,expiresAt:result.expires_at});
+    return result;
+  }));
+  app.delete("/api/admin/read-tokens/:id", adminHandler(async (req, _reply, admin) => {
+    const id = (req.params as {id:string}).id;
+    await revokeReadToken(id);
+    await audit(actorOf(admin), "read-token.revoke", id, null, null, {revoked:true});
+    return {ok:true};
+  }));
 
   app.get("/api/admin/me", adminHandler(async (_req, _reply, admin) => ({ name: admin.name, csrf: admin.csrf, dev: admin.dev })));
 }

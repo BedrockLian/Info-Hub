@@ -69,3 +69,10 @@ export async function updateBudget(service: string, input: { perMinute: number; 
   await audit(actor, "budget.update", `budget:${service}`, input.reason, before ?? null, after);
   return after;
 }
+
+
+export async function modelBudgetStatus() {
+  const [used] = await sql`SELECT coalesce(sum(budget_charge_usd) FILTER (WHERE started_at > now() - interval '1 day'),0)::float8 AS "dayUsd",
+    coalesce(sum(budget_charge_usd),0)::float8 AS "monthUsd" FROM receipt_attempts WHERE origin='live' AND started_at > now() - interval '30 days'`;
+  return {...used,dayLimitUsd:config.modelBudgetDayUsd,monthLimitUsd:config.modelBudgetMonthUsd,offPeakOnly:true};
+}

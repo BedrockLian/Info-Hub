@@ -1,3 +1,4 @@
+import { config } from "../config.ts";
 // Paid requests (models, SocialData, Jina, Dajiala) go through here.
 //
 // 1. A logical request has a stable key bound to task, input revision, provider, model, prompt and config.
@@ -48,6 +49,9 @@ export interface CallOutcome {
 }
 
 export interface ReceiptRequest {
+  /** Conservative upper bound, reserved atomically before a model request leaves the process. */
+  maxCostUsd?: number;
+  assertAvailable?: () => void;
   service: string;
   model?: string | null;
   purpose: string;
@@ -102,6 +106,15 @@ async function checkBudget(tx: Db, service: string): Promise<void> {
   if (c.day >= budget.per_day) throw new BudgetExceededError(service, "day", 3600);
 }
 
+async function checkMoneyBudget(tx: Db, req: ReceiptRequest): Promise<void> {
+  if (req.maxCostUsd === undefined) return;
+  if (!Number.isFinite(req.maxCostUsd) || req.maxCostUsd <= 0) throw new Error("Invalid model cost reservation");
+  const [spent] = await tx<{day:string;month:string}[]>`SELECT coalesce(sum(budget_charge_usd) FILTER (WHERE started_at > now() - interval '1 day'),0) AS day,
+    coalesce(sum(budget_charge_usd),0) AS month FROM receipt_attempts WHERE origin='live' AND started_at > now() - interval '30 days'`;
+  if (Number(spent!.day) + req.maxCostUsd > config.modelBudgetDayUsd) throw new BudgetExceededError(req.service,"USD rolling 24h",3600);
+  if (Number(spent!.month) + req.maxCostUsd > config.modelBudgetMonthUsd) throw new BudgetExceededError(req.service,"USD rolling 30d",3600);
+}
+
 /**
  * Runs a paid request at most once per logical key and returns its raw response.
  * The caller parses the response and commits business results, then calls completeReceipt.
@@ -110,6 +123,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
   const logicalKey = logicalKeyFor(req);
 
   const claimed = await sql.begin(async (tx) => {
+    if (req.maxCostUsd !== undefined) await tx`SELECT pg_advisory_xact_lock(hashtext('budget:models-usd'))`;
     // Serialise budget checks per service so concurrent workers cannot overshoot.
     await tx`SELECT pg_advisory_xact_lock(hashtext(${"budget:" + req.service}))`;
     const [existing] = await tx<ReceiptRow[]>`
@@ -123,12 +137,16 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
       }
       if (existing.status === "unknown") return { kind: "unknown" as const, row: existing };
       // failed: the provider did not take the request, or its answer was unusable; a new attempt is allowed.
+      req.assertAvailable?.();
+      await checkMoneyBudget(tx, req);
       await checkBudget(tx, req.service);
       const [r] = await tx<{ attempts: number }[]>`
         UPDATE receipts SET status = 'pending', attempts = attempts + 1, error = NULL, updated_at = now() WHERE id = ${existing.id} RETURNING attempts`;
       const attemptId = await startAttempt(tx, existing.id, r!.attempts, req);
       return { kind: "call" as const, id: existing.id, attemptId };
     }
+    req.assertAvailable?.();
+    await checkMoneyBudget(tx, req);
     await checkBudget(tx, req.service);
     const [row] = await tx<{ id: number }[]>`
       INSERT INTO receipts (logical_key, service, model, purpose, subject, status, request, attempts)
@@ -146,6 +164,14 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
   }
 
   const { id: receiptId, attemptId } = claimed;
+  // Recheck after committing: DB contention must not make an admitted request start during a peak.
+  try { req.assertAvailable?.(); } catch (error) {
+    await sql.begin(async tx => {
+      await tx`UPDATE receipts SET status='failed', error='deferred before send', updated_at=now() WHERE id=${receiptId}`;
+      await tx`UPDATE receipt_attempts SET status='failed', budget_charge_usd=0, error='deferred before send', finished_at=now() WHERE id=${attemptId}`;
+    });
+    throw error;
+  }
   const started = Date.now();
   let outcome: CallOutcome;
   try {
@@ -178,6 +204,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
       UPDATE receipt_attempts SET
         status = 'received', request_id = ${outcome.requestId ?? null}, usage = ${outcome.usage ? tx.json(outcome.usage as never) : null},
         cost = ${outcome.cost?.amount ?? null}, currency = ${outcome.cost?.currency ?? null}, cost_basis = ${outcome.cost?.basis ?? null},
+        budget_charge_usd = CASE WHEN ${req.maxCostUsd !== undefined && outcome.cost?.currency === "USD" && Number.isFinite(outcome.cost?.amount) && (outcome.cost?.amount ?? -1) >= 0} THEN ${outcome.cost?.amount ?? 0} ELSE budget_charge_usd END,
         latency_ms = ${Date.now() - started}, finished_at = now()
       WHERE id = ${attemptId}`;
   });
@@ -186,7 +213,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
 
 async function startAttempt(tx: Db, receiptId: number, attempt: number, req: ReceiptRequest): Promise<number> {
   const [row] = await tx<{ id: number }[]>`
-    INSERT INTO receipt_attempts (receipt_id, attempt, service, model, status) VALUES (${receiptId}, ${attempt}, ${req.service}, ${req.model ?? null}, 'pending')
+    INSERT INTO receipt_attempts (receipt_id, attempt, service, model, status, budget_charge_usd) VALUES (${receiptId}, ${attempt}, ${req.service}, ${req.model ?? null}, 'pending', ${req.maxCostUsd ?? 0})
     RETURNING id`;
   return row!.id;
 }

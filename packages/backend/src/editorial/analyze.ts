@@ -107,6 +107,9 @@ export function buildScoreInput(a: AnalyzeInputArticle): string {
 const PrefilterSchema = z.object({
   label: z.preprocess((v) => String(v ?? "").trim().toUpperCase(), z.enum(["PASS", "BLOCK", "UNKNOWN"])),
   reason: z.string().max(200).catch(""),
+  personalDisposition: z.enum(["pass", "exclude", "review"]).catch("review"),
+  personalReason: z.string().trim().max(300).catch(""),
+  personalEvidence: z.array(z.string().trim().min(1).max(300)).max(3).catch([]),
 });
 
 const FactSchema = z
@@ -151,7 +154,7 @@ const STRUCTURE_SYSTEM = promptText("structure", {
 });
 
 export interface AnalysisRun {
-  prefilter: { label: "PASS" | "BLOCK" | "UNKNOWN"; reason: string; model: string; receiptId: number; reused: boolean };
+  prefilter: { label: "PASS" | "BLOCK" | "UNKNOWN"; reason: string; personalDisposition: "pass" | "exclude" | "review"; personalReason: string; personalEvidence: string[]; model: string; receiptId: number; reused: boolean };
   /**
    * The independent score calls and the tier threshold they are held against; absent when the material
    * is not scored. `refused`: the model's content filter declined it, so it is not selected.
@@ -208,7 +211,11 @@ async function runPrefilter(a: AnalyzeInputArticle, opts: StepOpts): Promise<Ana
   });
   // A BLOCK without material to back it counts as UNKNOWN (which goes on).
   const label = res.data.label === "BLOCK" && missingEvidence(a) ? "UNKNOWN" : res.data.label;
-  return { label, reason: res.data.reason, model: res.model, receiptId: res.receiptId, reused: res.reused };
+  const material = buildMaterial(a);
+  const personalEvidence = res.data.personalEvidence.filter(quote => material.includes(quote));
+  const supported = !!res.data.personalReason && (res.data.personalDisposition !== "exclude" || personalEvidence.length > 0);
+  const personalDisposition = supported ? res.data.personalDisposition : "review";
+  return { label, reason: res.data.reason, personalDisposition, personalReason: res.data.personalReason || "缺少文章判断依据，待人工审核", personalEvidence, model: res.model, receiptId: res.receiptId, reused: res.reused };
 }
 
 async function runScores(a: AnalyzeInputArticle, threshold: number, opts: StepOpts): Promise<NonNullable<AnalysisRun["scores"]>> {
@@ -340,7 +347,7 @@ export async function runAnalysis(a: AnalyzeInputArticle, opts: StepOpts & { sta
   checkAnalysisRunning();
   const prefilter = await runPrefilter(a, opts);
   // UNKNOWN is let through (its material is as complete as it will get); BLOCK stops here.
-  if (prefilter.label === "BLOCK") return { prefilter, scores: null, writing: null, structure: null };
+  if (prefilter.label === "BLOCK" || prefilter.personalDisposition !== "pass") return { prefilter, scores: null, writing: null, structure: null };
   const threshold = tierThreshold(a.source.tier);
   if (opts.stages === "selection") {
     const scores = threshold === null ? null : await runScores(a, threshold, opts);
@@ -370,7 +377,7 @@ export function normalizeAnalysis(run: AnalysisRun) {
   const summaryZh = (run.writing?.summaryZh ?? "").trim();
   // Past the prefilter (PASS or UNKNOWN) an item is relevant, but without a usable Chinese title and
   // summary it cannot be published: it waits.
-  const relevance = label === "BLOCK" ? "block" : run.writing && (!titleZh || !summaryZh) ? "unknown" : "pass";
+  const relevance = label === "BLOCK" || run.prefilter.personalDisposition === "exclude" ? "block" : run.prefilter.personalDisposition === "review" || !run.writing || !titleZh || !summaryZh ? "unknown" : "pass";
   // Selected when the two scores add up to twice the tier threshold; the mean, floored,
   // is the score shown (it never decides a half point on its own).
   const values = run.scores && !run.scores.refused ? run.scores.values : null;
@@ -428,7 +435,7 @@ export async function analyzeArticle(articleId: string, opts: StepOpts = {}): Pr
   ];
   const w = run.writing;
   const detail = {
-    prefilter: { label: run.prefilter.label, reason: run.prefilter.reason },
+    prefilter: { label: run.prefilter.label, reason: run.prefilter.reason, personalDisposition: run.prefilter.personalDisposition, personalReason: run.prefilter.personalReason, personalEvidence: run.prefilter.personalEvidence },
     scores: out.scores, scoreModel: out.scoreModel, threshold: out.threshold, ...(out.scoreRefused ? { scoreRefused: true } : {}),
     ...(w ? { writer: w.kind, writerModel: w.model, itemType: w.itemType ?? null, authorRole: w.authorRole ?? null } : {}),
     ...(w?.identityGuard?.outcome === "fallback" ? { identityGuard: w.identityGuard } : {}),

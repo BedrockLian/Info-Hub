@@ -1,10 +1,12 @@
+import { modelWindow } from "./off-peak.ts";
+import { reserveFlashUsd, estimateFlashUsd } from "./pricing.ts";
 // OpenAI-compatible chat calls, always through receipts. One model is enough: `default` is whatever the
 // deployment names in LLM_BASE_URL / LLM_API_KEY / LLM_MODEL, and every capability uses it unless an
 // environment variable or the admin's model page picks one of the named presets below.
 import type { z } from "zod";
 import { config, credential } from "../config.ts";
 import { sha256 } from "../lib/ids.ts";
-import { completeReceipt, paidRequest, ProviderRejectedError, rejectReceivedResponse } from "./receipts.ts";
+import { completeReceipt, paidRequest, BudgetExceededError, ProviderRejectedError, rejectReceivedResponse } from "./receipts.ts";
 import { sql } from "../db.ts";
 
 export interface ModelSpec {
@@ -22,7 +24,9 @@ export interface ModelSpec {
 function extraFromEnv(value: string | undefined): Record<string, unknown> | undefined {
   if (!value) return undefined;
   try {
-    return JSON.parse(value) as Record<string, unknown>;
+    const extra = JSON.parse(value);
+    if (!extra || typeof extra !== 'object' || Array.isArray(extra)) throw new Error('object required');
+    return extra as Record<string, unknown>;
   } catch {
     throw new Error("LLM_EXTRA_JSON must be a JSON object, e.g. {\"enable_thinking\": false}");
   }
@@ -53,12 +57,12 @@ export const MODELS: Record<string, ModelSpec> = {
   // DeepSeek Flash reasons by default; structured tasks switch it off unless the -think variant is used.
   "deepseek-flash": {
     key: "deepseek-flash", service: "deepseek", model: "deepseek-flash",
-    baseUrlEnv: "DEEPSEEK_BASE_URL", apiKeyEnv: "DEEPSEEK_API_KEY",
+    baseUrlEnv: "DEEPSEEK_BASE_URL", apiKeyEnv: "DEEPSEEK_API_KEY", vision: false,
     extra: { thinking: { type: "disabled" } }, jsonMode: true,
   },
   "deepseek-flash-think": {
     key: "deepseek-flash-think", service: "deepseek", model: "deepseek-flash",
-    baseUrlEnv: "DEEPSEEK_BASE_URL", apiKeyEnv: "DEEPSEEK_API_KEY", jsonMode: true,
+    baseUrlEnv: "DEEPSEEK_BASE_URL", apiKeyEnv: "DEEPSEEK_API_KEY", vision: false, jsonMode: true,
   },
   "qwen3.7-flash": {
     key: "qwen3.7-flash", service: "dashscope", model: "qwen3.7-flash",
@@ -162,7 +166,17 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   const temperature = opts.temperature ?? 0.2;
   const maxTokens = Math.max(opts.maxTokens ?? 1500, 512) + (spec.key.endsWith("-think") ? 4000 : 0);
   const userText = typeof opts.user === "string" ? opts.user : JSON.stringify(opts.user);
+  const extra = spec.extra ?? {};
+  // The receipt and cost reservation must describe the actual model, input and output ceiling.
+  for (const key of ['model', 'messages', 'max_tokens', 'max_completion_tokens', 'stream', 'n']) {
+    if (Object.hasOwn(extra,key)) throw new Error(`LLM_EXTRA_JSON cannot override ${key}`);
+  }
+  if (config.privateSite) {
+    const allowed=new Set(['thinking','reasoning_effort','top_p','seed','frequency_penalty','presence_penalty']);
+    for (const key of Object.keys(extra)) if (!allowed.has(key)) throw new Error(`Private Info-Hub does not allow extra parameter ${key}`);
+  }
   const body: Record<string, unknown> = {
+    ...extra,
     model: spec.model,
     messages: [
       // A prompt given as one user message (the title/summary prompts) has no system message.
@@ -173,16 +187,21 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
     temperature,
     max_tokens: maxTokens,
     ...(spec.jsonMode && opts.json !== false ? { response_format: { type: "json_object" } } : {}),
-    ...(spec.extra ?? {}),
   };
+
+  const budgeted = config.privateSite;
+  if (budgeted && (spec.model !== "deepseek-flash" || new URL(baseUrl).hostname !== "api.deepseek.com" || Array.isArray(opts.user))) throw new Error("Private Info-Hub requires the configured text-only DeepSeek Flash pricing for cost control");
+  const maxCostUsd = budgeted ? reserveFlashUsd(JSON.stringify(body), maxTokens) : undefined;
 
   const receipt = await paidRequest(
     {
+      maxCostUsd,
+      assertAvailable: budgeted ? () => { const window=modelWindow(new Date(),opts.timeoutMs ?? 120000); if(!window.allowed)throw new BudgetExceededError(spec.service,"off-peak schedule",window.retryAfterSeconds); } : undefined,
       service: spec.service,
       model: spec.model,
       purpose: opts.purpose,
       subject: opts.subject,
-      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(opts.system), user: sha256(userText), temperature, maxTokens, extra: spec.extra ?? null },
+      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(opts.system), user: sha256(userText), temperature, maxTokens, extra },
       requestSummary: { promptVersion: opts.promptVersion, systemHash: sha256(opts.system), userHash: sha256(userText), userChars: userText.length, temperature, maxTokens },
       attemptTag: opts.attemptTag,
     },
@@ -216,7 +235,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
         response: { ...json, _latencyMs: Date.now() - started },
         requestId: (json.id as string | undefined) ?? res.headers.get("x-request-id"),
         usage,
-        cost: null,
+        cost: budgeted ? {amount:estimateFlashUsd(usage) ?? maxCostUsd!, currency:"USD",basis:"estimated"} : null,
       };
     },
   );

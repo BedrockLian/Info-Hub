@@ -1,6 +1,7 @@
 // v1 items and the selected sync (snapshot + changes), read from the same public read layer.
 import type { PublicApiCategoryKey } from "@aihot/contracts/taxonomy";
 import { sql, type Db } from "../db.ts";
+import { config } from '../config.ts';
 import { decodeCursor, encodeCursor, InvalidCursorError, queryBinding } from "../lib/cursor.ts";
 import { newShortId } from "../lib/ids.ts";
 import { categoryCondition, API_ITEM_COLUMNS, API_ITEM_FROM, listedCondition, selectedCondition, type ApiItemRow } from "./items.ts";
@@ -194,6 +195,10 @@ export async function selectedChanges(q: { cursor: string; limit: number }, now 
   const page = rows.slice(0, q.limit);
   const hasMore = rows.length > q.limit;
   const nextW = page.length ? page[page.length - 1]!.seq : Math.max(c.w, 0);
+  const inaccessible = config.privateSite && page.length ? new Set((await sql<{id:string}[]>`
+    SELECT l.article_id AS id FROM selected_ledger l LEFT JOIN publications p ON p.article_id=l.article_id
+    WHERE l.seq IN ${sql(page.map(r=>r.seq))} AND (p.article_id IS NULL OR p.visibility<>'public' OR NOT p.eligible)`
+  ).map(r=>r.id)) : new Set<string>();
   return {
     schemaVersion: 1 as const,
     fields: c.f,
@@ -201,7 +206,7 @@ export async function selectedChanges(q: { cursor: string; limit: number }, now 
     count: page.length,
     hasMore,
     changes: page.map((r) =>
-      r.op === "remove"
+      r.op === "remove" || inaccessible.has(r.article_id)
         ? { op: "remove" as const, changedAt: r.changed_at.toISOString(), id: r.article_id }
         : { op: "upsert" as const, changedAt: r.changed_at.toISOString(), item: c.f === "minimal" ? minimalOf(r.payload!) : r.payload! },
     ),

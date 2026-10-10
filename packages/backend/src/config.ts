@@ -32,8 +32,17 @@ function bool(name: string, fallback: boolean): boolean {
   return value === "1" || value.toLowerCase() === "true";
 }
 
+function amount(name: string, fallback: number): number {
+  const value = env[name] === undefined ? fallback : Number(env[name]);
+  if (!Number.isFinite(value) || value < 0) throw new Error(`${name} must be a non-negative amount`);
+  return value;
+}
+
 
 export const config = {
+  privateSite: bool("PRIVATE_SITE", true),
+  modelBudgetDayUsd: amount("MODEL_BUDGET_DAY_USD", 0.50),
+  modelBudgetMonthUsd: amount("MODEL_BUDGET_30D_USD", 10),
   databaseUrl: str("DATABASE_URL", "postgres://127.0.0.1:5432/aihot"),
   apiPort: int("API_PORT", 3001),
   webPort: int("WEB_PORT", 3000),
@@ -54,7 +63,7 @@ export const config = {
   // Name of this deployment in alerts ("production" sends them without a prefix).
   environmentName: str("AIHOT_ENVIRONMENT", isProduction ? "production" : "development"),
   // Model calls are live unless explicitly disabled (tests, replays).
-  modelCallsEnabled: bool("MODEL_CALLS_ENABLED", true),
+  modelCallsEnabled: bool("MODEL_CALLS_ENABLED", false),
   devAdmin: env.DEV_AUTH_ROLE === "admin" ? { displayName: env.DEV_AUTH_DISPLAY_NAME || "Dev Admin" } : null,
   /** The admin password (at least 12 characters). Feishu sign-in below is optional. */
   adminPassword: env.ADMIN_PASSWORD || null,
@@ -98,5 +107,7 @@ export function assertProductionSecrets(names: Array<[CredentialGroup, string]>)
   }
   for (const key of Object.keys(env)) if (key.startsWith("DEV_AUTH_")) problems.push(`${key} (dev login bypass)`);
   if (config.allowPrivateNetworkFetch) problems.push("ALLOW_PRIVATE_NETWORK_FETCH");
+  if (!config.privateSite) problems.push("PRIVATE_SITE=false");
+  if (!config.adminPassword || config.adminPassword.length < 12) problems.push("ADMIN_PASSWORD (at least 12 characters required)");
   if (problems.length > 0) throw new Error(`Refusing to start in production: ${problems.join(", ")}`);
 }

@@ -28,10 +28,11 @@ function cacheFact(id: string, textHash: string, vector: number[]) {
 
 /** Embeddings are paid model calls: MODEL_CALLS_ENABLED=false switches them off like every other call. */
 export function embeddingsAvailable(): boolean {
-  return config.modelCallsEnabled && !!(credential("models", "EMBEDDING_API_KEY") ?? credential("models", "DASHSCOPE_API_KEY")) && process.env.EMBEDDINGS_ENABLED !== "false";
+  return !config.privateSite && config.modelCallsEnabled && !!(credential("models", "EMBEDDING_API_KEY") ?? credential("models", "DASHSCOPE_API_KEY")) && process.env.EMBEDDINGS_ENABLED !== "false";
 }
 
 async function embedBatch(texts: string[], subject: string): Promise<number[][]> {
+  if (config.privateSite) throw new Error("Private Info-Hub uses lexical recall; embeddings are disabled");
   if (!config.modelCallsEnabled) throw new Error("Model calls are disabled (MODEL_CALLS_ENABLED=false)");
   const base = own ? credential("models", "EMBEDDING_BASE_URL") ?? "https://api.openai.com/v1" : credential("models", "DASHSCOPE_BASE_URL") ?? "https://dashscope.aliyuncs.com/compatible-mode/v1";
   const key = own ? credential("models", "EMBEDDING_API_KEY") : credential("models", "DASHSCOPE_API_KEY");

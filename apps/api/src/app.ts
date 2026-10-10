@@ -1,3 +1,4 @@
+import { registerPrivateBoundary } from "./private.ts";
 import { FEATURES } from "@aihot/industry/features";
 import Fastify, { type FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
@@ -21,7 +22,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     logger: { level: process.env.LOG_LEVEL || "info", redact: ["req.headers.authorization", "req.headers.cookie"] },
     // Access logs never record query strings (tokens, actors).
     disableRequestLogging: true,
-    trustProxy: true,
+    trustProxy: process.env.TRUST_PROXY === "true",
     genReqId: () => randomUUID(),
     bodyLimit: 10 * 1024 * 1024,
     routerOptions: { ignoreTrailingSlash: false, maxParamLength: 300 },
@@ -39,6 +40,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       req.log.warn({ method: req.method, path, status: reply.statusCode, ms }, "request");
     }
   });
+
+  registerPrivateBoundary(app);
 
   // Central redirect table (shared with the web server).
   app.addHook("onRequest", async (req, reply) => {

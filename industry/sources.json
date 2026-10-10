@@ -1,289 +1,12 @@
 {
-  "$comment": "示范信源：首次启动时导入（scripts/seed.ts），已存在的不会被覆盖。之后在后台“信源”里增删改。字段说明见 docs/customize.md。",
+  "$comment": "个人核心 RSS，2026-10-10 核验；新来源 Stratechery 来自 plenaryapp/awesome-rss-feeds。文章按内容分类，信源标签不强制分类。",
   "sources": [
     {
-      "id": "rss-openai-news",
-      "name": "OpenAI News",
+      "id": "radar-bbc-world",
+      "name": "BBC World",
       "kind": "rss",
       "config": {
-        "feedUrl": "https://openai.com/news/rss.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "openai",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-google-deepmind",
-      "name": "Google DeepMind",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://deepmind.google/blog/rss.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "google",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-google-research",
-      "name": "Google Research",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://research.google/blog/rss/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "google",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "研究"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-hugging-face",
-      "name": "Hugging Face Blog",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://huggingface.co/blog/feed.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "hugging-face",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "开源"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-microsoft-research",
-      "name": "Microsoft Research",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://www.microsoft.com/en-us/research/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "microsoft",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "研究"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-nvidia-blog",
-      "name": "NVIDIA Blog",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://blogs.nvidia.com/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": "nvidia",
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-aws-ml",
-      "name": "AWS Machine Learning Blog",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://aws.amazon.com/blogs/machine-learning/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方",
-        "教程"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-github-ai",
-      "name": "GitHub Blog · AI & ML",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://github.blog/ai-and-ml/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-mistral",
-      "name": "Mistral AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://mistral.ai/rss.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 120,
-      "tags": [
-        "官方"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-bair",
-      "name": "Berkeley AI Research",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://bair.berkeley.edu/blog/feed.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T1",
-      "first_party": true,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 180,
-      "tags": [
-        "研究"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-the-verge-ai",
-      "name": "The Verge · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-techcrunch-ai",
-      "name": "TechCrunch · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://techcrunch.com/category/artificial-intelligence/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-ars-technica-ai",
-      "name": "Ars Technica · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://arstechnica.com/ai/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-mit-tech-review-ai",
-      "name": "MIT Technology Review · AI",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://www.technologyreview.com/topic/artificial-intelligence/feed",
+        "feedUrl": "https://feeds.bbci.co.uk/news/world/rss.xml",
         "_aihot": {
           "initialBackfillLimit": 8
         }
@@ -294,38 +17,17 @@
       "participation_mode": "editorial",
       "interval_minutes": 120,
       "tags": [
-        "媒体"
+        "国际时事"
       ],
       "site_fulltext": false,
       "syndicate_fulltext": false
     },
     {
-      "id": "rss-the-decoder",
-      "name": "The Decoder",
+      "id": "radar-guardian-world",
+      "name": "The Guardian World",
       "kind": "rss",
       "config": {
-        "feedUrl": "https://the-decoder.com/feed/",
-        "_aihot": {
-          "initialBackfillLimit": 8
-        }
-      },
-      "tier": "T2",
-      "first_party": false,
-      "owner_entity_id": null,
-      "participation_mode": "editorial",
-      "interval_minutes": 60,
-      "tags": [
-        "媒体"
-      ],
-      "site_fulltext": false,
-      "syndicate_fulltext": false
-    },
-    {
-      "id": "rss-simon-willison",
-      "name": "Simon Willison",
-      "kind": "rss",
-      "config": {
-        "feedUrl": "https://simonwillison.net/atom/everything/",
+        "feedUrl": "https://www.theguardian.com/world/rss",
         "_aihot": {
           "initialBackfillLimit": 8
         }
@@ -336,17 +38,17 @@
       "participation_mode": "editorial",
       "interval_minutes": 120,
       "tags": [
-        "个人"
+        "国际时事"
       ],
       "site_fulltext": false,
       "syndicate_fulltext": false
     },
     {
-      "id": "rss-import-ai",
-      "name": "Import AI",
+      "id": "radar-bellingcat",
+      "name": "Bellingcat",
       "kind": "rss",
       "config": {
-        "feedUrl": "https://importai.substack.com/feed",
+        "feedUrl": "https://www.bellingcat.com/feed/",
         "_aihot": {
           "initialBackfillLimit": 8
         }
@@ -355,20 +57,19 @@
       "first_party": false,
       "owner_entity_id": null,
       "participation_mode": "editorial",
-      "interval_minutes": 180,
+      "interval_minutes": 120,
       "tags": [
-        "个人",
-        "周刊"
+        "调查报道"
       ],
       "site_fulltext": false,
       "syndicate_fulltext": false
     },
     {
-      "id": "rss-latent-space",
-      "name": "Latent Space",
+      "id": "radar-meduza-en",
+      "name": "Meduza English",
       "kind": "rss",
       "config": {
-        "feedUrl": "https://www.latent.space/feed",
+        "feedUrl": "https://meduza.io/rss/en/all",
         "_aihot": {
           "initialBackfillLimit": 8
         }
@@ -377,9 +78,429 @@
       "first_party": false,
       "owner_entity_id": null,
       "participation_mode": "editorial",
-      "interval_minutes": 180,
+      "interval_minutes": 120,
       "tags": [
-        "个人"
+        "国际时事"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-bbc-zh",
+      "name": "BBC 中文",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://feeds.bbci.co.uk/zhongwen/simp/rss.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-dw-zh",
+      "name": "德国之声 中文",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://rss.dw.com/rdf/rss-chi-all",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-ft-cn",
+      "name": "FT 中文网",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.ftchinese.com/rss/news",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-hkfp",
+      "name": "Hong Kong Free Press",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://hongkongfp.com/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-taipei-times",
+      "name": "Taipei Times",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.taipeitimes.com/xml/index.rss",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-diplomat",
+      "name": "The Diplomat",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://thediplomat.com/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-404-media",
+      "name": "404 Media",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.404media.co/rss/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-ars-technica",
+      "name": "Ars Technica",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://feeds.arstechnica.com/arstechnica/index",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-mit-technology-review",
+      "name": "MIT Technology Review",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.technologyreview.com/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-rest-of-world",
+      "name": "Rest of World",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://restofworld.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-stratechery",
+      "name": "Stratechery",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://stratechery.com/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-gematsu",
+      "name": "Gematsu",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.gematsu.com/feed",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-game-developer",
+      "name": "Game Developer",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.gamedeveloper.com/rss.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-gamediscoverco",
+      "name": "GameDiscoverCo",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://newsletter.gamediscover.co/feed",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-rock-paper-shotgun",
+      "name": "Rock Paper Shotgun",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.rockpapershotgun.com/feed",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-propublica",
+      "name": "ProPublica",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.propublica.org/feeds/propublica/main",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-icij",
+      "name": "ICIJ",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.icij.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-the-conversation",
+      "name": "The Conversation",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://theconversation.com/global/articles.atom",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-nhk-politics",
+      "name": "NHK 政治",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://news.web.nhk/n-data/conf/na/rss/cat4.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "东亚"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "radar-yonhap-cn-politics",
+      "name": "韩联社 中文政治",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://cn.yna.co.kr/RSS/politics.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "东亚"
       ],
       "site_fulltext": false,
       "syndicate_fulltext": false

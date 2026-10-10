@@ -52,6 +52,7 @@ export default [
     route("admin/selectbench", "routes/admin/selectbench.tsx"),
     route("admin/selectbench/:runId", "routes/admin/selectbench-run.tsx"),
     route("admin/settings", "routes/admin/settings.tsx"),
+    route("admin/tokens", "routes/admin/tokens.tsx"),
     route("admin/audit", "routes/admin/audit.tsx"),
   ]),
 ] satisfies RouteConfig;

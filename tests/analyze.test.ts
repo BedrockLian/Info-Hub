@@ -23,11 +23,11 @@ const X_SOURCE = `test-analyze-x-${T}`;
 type Step = "prefilter" | "score" | "understand" | "summarize" | "structure";
 interface Req { step: Step; marker: string; system: string; user: string; body: Record<string, any> }
 const requests: Req[] = [];
-const MARKERS = ["CLEAR", "RESCUE", "LOW", "OFFTOPIC", "BARE", "VAGUE", "THIN", "SENSITIVE", "推文"];
-const scoreAnswers: Record<string, number[]> = { CLEAR: [78, 72], RESCUE: [56, 50], LOW: [45, 40], THIN: [70, 70], SENSITIVE: [80, 80], 推文: [40, 40], BARE: [30, 34], VAGUE: [60, 62] };
+const MARKERS = ["EXCLUDE", "REVIEW", "NOAUDIT", "FAKEQUOTE", "CLEAR", "RESCUE", "LOW", "OFFTOPIC", "BARE", "VAGUE", "THIN", "SENSITIVE", "推文"];
+const scoreAnswers: Record<string, number[]> = { EXCLUDE:[70,70], REVIEW:[70,70], NOAUDIT:[70,70], FAKEQUOTE:[70,70], CLEAR: [78, 72], RESCUE: [56, 50], LOW: [45, 40], THIN: [70, 70], SENSITIVE: [80, 80], 推文: [40, 40], BARE: [30, 34], VAGUE: [60, 62] };
 
 const stepOf = (system: string, user: string): Step =>
-  system.includes("宽召回的AI相关性预筛") ? "prefilter" : system.includes("事件注意力评分器") ? "score"
+  system.startsWith("为") && system.includes("预筛") ? "prefilter" : system.includes("事件注意力评分器") ? "score"
   : system.includes("内容理解编辑") ? "understand" : system.includes("资料结构化助手") ? "structure"
   : user.includes("title_zh") ? "summarize" : (() => { throw new Error("unknown request"); })();
 
@@ -41,13 +41,13 @@ const provider = await stub((_hit, req) => {
   const marker = MARKERS.find((m) => user.includes(m)) ?? "";
   requests.push({ step, marker, system, user, body });
   const answer = (content: unknown) => ({ id: `stub-${requests.length}`, model: "stub", choices: [{ message: { content: typeof content === "string" ? content : JSON.stringify(content) } }], usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } });
-  if (step === "prefilter") return answer({ label: marker === "OFFTOPIC" || marker === "BARE" ? "BLOCK" : marker === "VAGUE" ? "UNKNOWN" : "PASS", reason: "测试" });
+  if (step === "prefilter") return answer({ label: marker === "OFFTOPIC" || marker === "BARE" ? "BLOCK" : marker === "VAGUE" ? "UNKNOWN" : "PASS", reason: "测试", ...(marker === "NOAUDIT" ? {} : {personalDisposition: marker === "EXCLUDE" || marker === "FAKEQUOTE" ? "exclude" : marker === "REVIEW" ? "review" : "pass", personalReason:"测试文章依据", personalEvidence:marker === "EXCLUDE" ? ["a lab released a model"] : marker === "FAKEQUOTE" ? ["fabricated evidence not in material"] : []}) });
   if (step === "score") return answer({ attentionScore: scoreAnswers[marker]!.shift() });
   if (step === "understand") {
     if (marker === "SENSITIVE") return new Reply(400, { contentFilter: [{ level: 1, role: "user" }], error: { code: "1301", message: "系统检测到输入或生成内容可能包含不安全或敏感内容" } });
     return answer({ itemType: "model_release", authorRole: "principal", tags: ["模型发布", "开源", "Agent", "不存在的标签"], editorialJudgment: `理由 ${marker}`, titleZh: `理解标题 ${marker}`, summaryZh: `理解摘要 ${marker}。第二句补充一个关键数字。` });
   }
-  if (step === "structure") return answer({ category: "ai-models", tags: ["模型发布", "推理"], subjects: ["anthropic", "unknown-co"], fact: { title: `事实 ${marker}`, subject: "某公司", action: "发布", object: "模型", occurredAt: null } });
+  if (step === "structure") return answer({ category: "technology", tags: ["模型发布", "推理"], subjects: ["anthropic", "unknown-co"], fact: { title: `事实 ${marker}`, subject: "某公司", action: "发布", object: "模型", occurredAt: null } });
   return answer(`title_zh: 翻译标题 ${marker}\nsummary_zh: 翻译摘要 ${marker}。第二句补充影响。`);
 });
 for (const env of ["DASHSCOPE_BASE_URL", "ZHIPU_BASE_URL", "DEEPSEEK_BASE_URL"]) process.env[env] = `${provider.url}/v1`;
@@ -88,7 +88,7 @@ test("every prompt in the pack renders, and the site's name replaces AIHOT's", (
     const text = promptText(file.slice(0, -3), values);
     assert.ok(text.length > 20 && !/\{\{/.test(text), file);
   }
-  assert.ok(PREFILTER_SYSTEM.startsWith(`为${SITE.name}做宽召回的AI相关性预筛`));
+  assert.ok(PREFILTER_SYSTEM.startsWith(`为${SITE.name}做个人主题与内容立场预筛`));
 });
 
 test("a selected item: prefilter, two scores, the content understanding and the structure", async () => {
@@ -98,7 +98,7 @@ test("a selected item: prefilter, two scores, the content understanding and the 
   assert.deepEqual([res!.output!.selected, res!.output!.score], [true, 75], "78 + 72 = 150 >= 120");
   assert.deepEqual(calls("CLEAR").sort(), ["prefilter", "score", "score", "structure", "understand"]);
   const r = await row(id);
-  assert.deepEqual([r.title_zh, r.reason_zh, r.category, r.receipt_ids.length], ["理解标题 CLEAR", "理由 CLEAR", "ai-models", 5]);
+  assert.deepEqual([r.title_zh, r.reason_zh, r.category, r.receipt_ids.length], ["理解标题 CLEAR", "理由 CLEAR", "technology", 5]);
   assert.deepEqual(r.tags, ["模型发布", "开源/仓库", "Agent", "Anthropic"], "vocabulary tags (synonyms mapped, unknown dropped) and the subject's tag");
   assert.deepEqual(r.subjects, ["anthropic"]);
   assert.deepEqual([r.output.writer, r.output.itemType, r.output.prefilter.label, r.output.fact.title], ["understand", "model_release", "PASS", "事实 CLEAR"]);
@@ -195,4 +195,18 @@ test("analysing the same revision again reuses every paid answer", async () => {
   const again = await analyzeArticle(id);
   assert.equal(provider.hits(), hits, "no new requests");
   assert.deepEqual([again!.reused, again!.receiptIds], [true, first!.receiptIds]);
+});
+
+
+test("personal exclusions and uncertain judgments stop before scoring or writing and retain evidence", async () => {
+  for (const marker of ["EXCLUDE", "REVIEW", "NOAUDIT", "FAKEQUOTE"]) {
+    const id = await article(marker);
+    const result = await analyzeArticle(id);
+    assert.deepEqual(calls(marker), ["prefilter"], marker);
+    assert.equal(result!.output!.selected, false);
+    assert.equal(result!.output!.relevance, marker === "EXCLUDE" ? "block" : "unknown");
+    const stored = await row(id);
+    assert.equal(stored.output.prefilter.personalDisposition, marker === "EXCLUDE" ? "exclude" : "review");
+    if (marker === "EXCLUDE") assert.deepEqual(stored.output.prefilter.personalEvidence, ["a lab released a model"]);
+  }
 });

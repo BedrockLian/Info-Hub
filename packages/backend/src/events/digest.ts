@@ -51,7 +51,7 @@ export async function composeStoryDigest(storyId: number, opts: { afterCorrectio
   if (sameReports && (last!.inputs_hash === inputsHash || (last!.inputs_hash === null && !opts.afterCorrection))) return { updated: false };
   // Same reports, different content: an editor corrected one. Rewrite from the reports as they are now,
   // without the previous digest, so a corrected fact does not survive as "earlier reports said".
-  const corrected = sameReports;
+  const corrected = sameReports || !!last?.article_ids.some(id => !ids.includes(id));
   const known = new Set(last?.article_ids ?? []);
 
   const lines = reports.slice(-40).map((r) => `${corrected || known.has(r.id) ? "" : "【新】"}${beijingDate(r.at)} ${beijingTime(r.at)}｜${r.source_name}${r.first_party ? "（一手）" : ""}｜${r.title}｜${(r.summary ?? "").slice(0, 220)}`);
@@ -63,7 +63,19 @@ export async function composeStoryDigest(storyId: number, opts: { afterCorrectio
     system: SYSTEM, user, schema: Schema, temperature: 0.3, maxTokens: 1200,
   });
   const version = story.version + 1;
-  await sql.begin(async (tx) => {
+  const updated = await sql.begin(async (tx) => {
+    // Publication changes and concurrent composers may happen while the provider is answering.
+    // Lock the evidence, then the story (the same order as publication withdrawal) before committing.
+    await tx`SELECT article_id FROM publications WHERE article_id IN (
+      SELECT fa.article_id FROM fact_articles fa JOIN facts f ON f.id=fa.fact_id WHERE f.story_id=${storyId})
+      ORDER BY article_id FOR SHARE`;
+    const current = await tx<{id:string;title:string;summary:string|null}[]>`
+      SELECT DISTINCT p.article_id AS id,p.title,p.summary FROM publications p
+      WHERE p.visibility='public' AND p.eligible AND p.article_id IN (
+        SELECT fa.article_id FROM fact_articles fa JOIN facts f ON f.id=fa.fact_id WHERE f.story_id=${storyId})`;
+    const [live] = await tx<{version:number}[]>`SELECT version FROM stories WHERE id=${storyId} FOR UPDATE`;
+    const currentHash=sha256(stableJson(current.sort((a,b)=>a.id.localeCompare(b.id)).map(r=>[r.id,r.title,r.summary ?? ''])));
+    if (live?.version !== story.version || currentHash !== inputsHash) {await completeReceipt(tx,res.receiptId);return false;}
     await tx`INSERT INTO story_digests (story_id, version, digest, latest, receipt_id, article_ids, inputs_hash)
              VALUES (${storyId}, ${version}, ${res.data.digest}, ${res.data.latest || null}, ${res.receiptId}, ${ids}, ${inputsHash})`;
     await tx`UPDATE stories SET digest = ${res.data.digest}, latest = ${res.data.latest || null}, digest_updated_at = now(),
@@ -71,8 +83,9 @@ export async function composeStoryDigest(storyId: number, opts: { afterCorrectio
                version = ${version}, updated_at = now()
              WHERE id = ${storyId}`;
     await completeReceipt(tx, res.receiptId);
+    return true;
   });
-  return { updated: true, version };
+  return updated ? { updated: true, version } : {updated:false};
 }
 
 /** Periodic: statuses follow activity (持续更新 / 观察中 / 历史事件). */

@@ -1,3 +1,4 @@
+import "./setup.ts";
 // Public scope and sync through the real api routes: a licence revocation or a withdrawal reaches
 // every exit, reports stop quoting withdrawn items, the hot board drops a withdrawn item at once, item
 // pages follow the site's rule, an early release keeps the selected ledger in order, a withdrawal
@@ -49,7 +50,7 @@ async function article(): Promise<string> {
     sourceId: SOURCE, url: `https://example.com/${T}-${n}`, title: `Test ${n}`, bodyText: BODY, bodyHtml: `<p>${BODY}</p>`, bodyStatus: "ok", via: "fetch", publishedAt: new Date(),
   });
   await sql`INSERT INTO analyses (article_id, input_revision, origin, relevance, category, title_zh, summary_zh, reason_zh, score, selected)
-            VALUES (${articleId}, 1, 'rule', 'pass', 'ai-models', ${`标题${n}-${T}`}, ${`SUMMARY-${n}-${T}`}, '理由', 90, true)`;
+            VALUES (${articleId}, 1, 'rule', 'pass', 'technology', ${`标题${n}-${T}`}, ${`SUMMARY-${n}-${T}`}, '理由', 90, true)`;
   return articleId;
 }
 

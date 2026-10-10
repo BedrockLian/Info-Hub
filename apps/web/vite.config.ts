@@ -1,3 +1,4 @@
+import { requestContext, privateSite, contextOf } from "./request-context.ts";
 import { request as httpRequest } from "node:http";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
@@ -11,12 +12,26 @@ function devEdge(): Plugin {
   return {
     name: "aihot-dev-edge",
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
+      server.middlewares.use(async (req, res, next) => {
         const raw = req.url ?? "/";
         const qi = raw.indexOf("?");
         const pathname = qi >= 0 ? raw.slice(0, qi) : raw;
         const search = qi >= 0 ? raw.slice(qi) : "";
         if (pathname.startsWith("/@") || pathname.startsWith("/node_modules/") || pathname.startsWith("/app/") || pathname.startsWith("/__")) return next();
+        if (privateSite && !isApiOwned(pathname)) {
+          res.setHeader("Cache-Control", "private, no-store");
+          res.setHeader("X-Accel-Expires", "0");
+          if (!["/admin/login","/admin/login.data","/favicon.ico","/icon.png","/apple-icon.png","/manifest.webmanifest"].includes(pathname)) {
+            try {
+              const check = await fetch(new URL("/api/auth/read-check", API), {headers:contextOf(req).headers, signal:AbortSignal.timeout(5000)});
+              if (check.status !== 204) {
+                res.statusCode = pathname.endsWith(".data") ? 401 : 302;
+                if(res.statusCode===302)res.setHeader("Location",`/admin/login?${new URLSearchParams({return:raw})}`);
+                return res.end();
+              }
+            } catch { res.statusCode=503; return res.end("Authentication unavailable"); }
+          }
+        }
         const decision = resolveRedirect(pathname, search);
         if (decision) {
           for (const [k, v] of Object.entries(decision.headers)) res.setHeader(k, v);
@@ -24,7 +39,7 @@ function devEdge(): Plugin {
           res.statusCode = decision.status;
           return res.end();
         }
-        if (!isApiOwned(pathname)) return next();
+        if (!isApiOwned(pathname)) return requestContext.run(contextOf(req), () => next());
         const upstream = httpRequest(
           { hostname: API.hostname, port: API.port, path: raw, method: req.method, headers: req.headers },
           (up) => {

@@ -48,7 +48,7 @@ before(async () => {
   api.listen(0, "127.0.0.1");
   await once(api, "listening");
   web = spawn(process.execPath, [fileURLToPath(new URL("../server.ts", import.meta.url))], {
-    env: { ...process.env, WEB_PORT: "0", TRUST_PROXY: "false", API_BASE_URL: `http://127.0.0.1:${(api.address() as AddressInfo).port}` },
+    env: { ...process.env, PRIVATE_SITE: "false", NODE_ENV: "test", WEB_PORT: "0", TRUST_PROXY: "false", API_BASE_URL: `http://127.0.0.1:${(api.address() as AddressInfo).port}` },
     stdio: ["ignore", "pipe", "pipe"],
   });
   await new Promise<void>((resolve, reject) => {

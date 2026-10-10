@@ -1,3 +1,4 @@
+import { FEATURES } from "@aihot/industry/features";
 // Daily, weekly and monthly reports. Windows are Beijing calendar based and written into the report;
 // missed schedule points are caught up; regeneration creates a revision. The editors' prompts are in
 // the industry pack (industry/prompts/report-*.md), the sections follow its categories.
@@ -17,7 +18,7 @@ export const REPORT_VERSION = promptVersion("report-daily-lead", "report-period"
 const SECTION_OF: Record<string, string> = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.section]));
 const SECTION_ORDER = [...new Set(CATEGORIES.map((c) => c.section))];
 /** Where an item without a category goes. */
-const DEFAULT_SECTION = SECTION_OF.industry ?? SECTION_ORDER.at(-1)!;
+const DEFAULT_SECTION = SECTION_OF.global_affairs ?? SECTION_ORDER.at(-1)!;
 
 export interface ReportEntry {
   itemId: string;
@@ -269,7 +270,7 @@ export async function catchUpReports(now = new Date(), days = 7): Promise<{ gene
   const dow = (new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7;
   const lastWeek = isoWeekLabel(addDays(today, -dow - 7));
   const weekDue = dow > 0 || bjHour >= 10;
-  if (weekDue) {
+  if (FEATURES.weeklyReports && weekDue) {
     const [w] = await sql`SELECT 1 FROM reports WHERE kind = 'weekly' AND key = ${lastWeek}`;
     if (!w) {
       await composeWeekly(lastWeek, "catch-up");
@@ -280,7 +281,7 @@ export async function catchUpReports(now = new Date(), days = 7): Promise<{ gene
   const [y, mo, dd] = today.split("-").map(Number) as [number, number, number];
   const prevMonth = mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, "0")}`;
   const monthDue = dd > 1 || bjHour > 10 || (bjHour === 10 && Number(new Date(now.getTime() + 8 * 3600000).toISOString().slice(14, 16)) >= 30);
-  if (monthDue) {
+  if (FEATURES.monthlyReports && monthDue) {
     const [m] = await sql`SELECT 1 FROM reports WHERE kind = 'monthly' AND key = ${prevMonth}`;
     if (!m) {
       await composeMonthly(prevMonth, "catch-up");

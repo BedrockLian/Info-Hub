@@ -1,3 +1,4 @@
+import { config as privateConfig } from "@aihot/backend/config";
 // Discovery and static files: sitemap, llms.txt, robots, security.txt, the web manifest, the OpenAPI
 // document, icons, the IndexNow key, leaderboard logos and the about page's contact codes.
 import { readFile, stat } from "node:fs/promises";
@@ -125,7 +126,7 @@ export function registerStatic(app: FastifyInstance) {
     return sendTextWithEtag(req, reply, text, { etagPrefix: "llms", cacheControl: "public, s-maxage=3600, stale-while-revalidate=86400", contentType: "text/plain; charset=utf-8" });
   });
 
-  app.get("/robots.txt", (req, reply) => sendTextWithEtag(req, reply, robotsTxt(), { etagPrefix: "robots", cacheControl: "public, max-age=3600", contentType: "text/plain; charset=utf-8" }));
+  app.get("/robots.txt", (req, reply) => sendTextWithEtag(req, reply, (privateConfig.privateSite ? "User-agent: *\nDisallow: /\n" : robotsTxt()), { etagPrefix: "robots", cacheControl: "public, max-age=3600", contentType: "text/plain; charset=utf-8" }));
 
   app.get("/.well-known/security.txt", (req, reply) => {
     if (!SITE.contactEmail) return reply.code(404).type("text/plain; charset=utf-8").send("Not found");

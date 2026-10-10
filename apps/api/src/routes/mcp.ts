@@ -84,6 +84,7 @@ const DAILY_INPUT = z.strictObject({
 // shared for; a failed read is not kept.
 const results = new Map<string, { at: number; value: Promise<unknown> }>();
 function recent<T>(key: string, load: () => Promise<T>): Promise<T> {
+  if (config.privateSite) return load();
   const hit = results.get(key);
   if (hit && Date.now() - hit.at < 30_000) return hit.value as Promise<T>;
   const value = load();

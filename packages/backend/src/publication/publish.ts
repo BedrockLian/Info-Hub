@@ -31,6 +31,8 @@ interface ArticleRow {
 
 interface AnalysisRow {
   id: number;
+  origin: string;
+  output: {prefilter?: {personalDisposition?: string}} | null;
   relevance: string | null;
   category: string | null;
   tags: string[];
@@ -156,7 +158,7 @@ export async function publishArticleTx(tx: Tx, articleId: string, options: Publi
     SELECT id, name, kind, tier, participation_mode, first_party, site_fulltext, syndicate_fulltext FROM sources WHERE id = ${article.source_id}`;
   if (!source) return null;
   const [analysis] = await tx<AnalysisRow[]>`
-    SELECT id, relevance, category, tags, subjects, title_zh, summary_zh, reason_zh, score, selected
+    SELECT id, origin, output, relevance, category, tags, subjects, title_zh, summary_zh, reason_zh, score, selected
     FROM analyses WHERE article_id = ${articleId} ORDER BY input_revision DESC, id DESC LIMIT 1`;
   const [override] = await tx<OverrideRow[]>`SELECT fields, visibility FROM editorial_overrides WHERE article_id = ${articleId}`;
   const [membership] = await tx<{ fact_id: number; story_id: number | null }[]>`
@@ -179,9 +181,12 @@ export async function publishArticleTx(tx: Tx, articleId: string, options: Publi
   const relevance = typeof f.relevance === "string" ? (f.relevance as string) : analysis?.relevance ?? null;
   const judgedSelected = typeof f.selected === "boolean" ? (f.selected as boolean) : analysis?.selected ?? null;
   // Material from an isolated source reaches no public surface at all: not even a detail page.
-  const visibility = source.participation_mode === "isolated" ? "withdrawn" : (override?.visibility ?? "public");
+  const disposition = analysis?.output?.prefilter?.personalDisposition;
+  const reviewed = f.relevance === "pass" || (analysis?.origin !== "model" && relevance === "pass") || disposition === "pass";
+  const readingDenied = config.privateSite && (relevance !== "pass" || !reviewed);
+  const visibility = source.participation_mode === "isolated" || readingDenied ? "withdrawn" : (override?.visibility ?? "public");
 
-  const eligible = isPoolEligible({ participationMode: source.participation_mode, relevance, title, summary });
+  const eligible = !readingDenied && isPoolEligible({ participationMode: source.participation_mode, relevance, title, summary });
   const selected = isSelectable(eligible, judgedSelected, source.tier);
   const reason = selected ? pickString(f.reason, analysis?.reason_zh ?? null) : null;
   const hasXPost = !!article.x_post;
@@ -327,6 +332,19 @@ export async function publishArticleTx(tx: Tx, articleId: string, options: Publi
       (previous!.visibility === "public" && visibility !== "public") ||
       (previous!.selected && !selected) ||
       (previous!.body_mode === "full" && bodyMode !== "full"));
+  if (config.privateSite && previous?.visibility === 'public' && visibility !== 'public') {
+    // A digest has no sentence-level provenance. Immediately invalidate all its prose when any
+    // supporting report is withdrawn, including secondary memberships; preserve history for audit.
+    await tx`UPDATE stories st SET digest=NULL, summary=NULL, latest=NULL, digest_updated_at=NULL,
+      title=coalesce((SELECT p.title FROM facts f JOIN fact_articles fa ON fa.fact_id=f.id
+        JOIN publications p ON p.article_id=fa.article_id WHERE f.story_id=st.id
+        AND p.visibility='public' AND p.eligible ORDER BY p.first_party DESC,p.timeline_at LIMIT 1),'待重新整理的事件'),
+      version=version+1, updated_at=now()
+      WHERE st.id IN (SELECT f.story_id FROM facts f JOIN fact_articles fa ON fa.fact_id=f.id WHERE fa.article_id=${articleId})`;
+    await tx`UPDATE facts f SET title=coalesce((SELECT p.title FROM fact_articles fa JOIN publications p ON p.article_id=fa.article_id
+      WHERE fa.fact_id=f.id AND p.visibility='public' AND p.eligible ORDER BY p.first_party DESC,p.timeline_at LIMIT 1),'待重新整理的进展')
+      WHERE f.id IN (SELECT fact_id FROM fact_articles WHERE article_id=${articleId})`;
+  }
   return { articleId, changed, selected, visibility, ledger, reduced };
 }
 

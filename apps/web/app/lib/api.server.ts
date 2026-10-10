@@ -1,3 +1,4 @@
+import { requestContext, privateSite } from "../../request-context.ts";
 // Server-side HTTP client for route loaders. The web process never touches the database;
 // SSR reads the api over loopback with keep-alive, one or two requests per page.
 import { data, redirect } from "react-router";
@@ -18,7 +19,7 @@ export class ApiError extends Error {
 
 export async function apiGet<T>(path: string, init?: { signal?: AbortSignal; headers?: Record<string, string>; responseHeaders?: Headers }): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: { accept: "application/json", "x-aihot-ssr": "1", ...init?.headers },
+    headers: { accept: "application/json", "x-aihot-ssr": "1", ...(privateSite ? requestContext.getStore()?.headers : {}), ...init?.headers },
     signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
   });
   if (!res.ok) {
@@ -42,6 +43,7 @@ export async function loadOr404<T>(path: string, opts: { busyRedirect?: string; 
   } catch (error) {
     if (opts.signal?.aborted) throw error;
     if (error instanceof ApiError) {
+      if (error.status === 401) throw redirect(`/admin/login?${new URLSearchParams({return: requestContext.getStore()?.returnTo ?? "/"})}`);
       if (error.status === 404) throw data({ message: "not_found" }, { status: 404 });
       if (error.status === 503 && opts.busyRedirect) throw redirect(opts.busyRedirect);
       if (error.status === 400) throw data({ message: "bad_request" }, { status: 400 });

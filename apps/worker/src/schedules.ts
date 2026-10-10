@@ -38,27 +38,27 @@ const collecting = process.env.COLLECT_ENABLED !== "false";
 export const SCHEDULES: Scheduled[] = [
   { name: "content.sweep", cron: "*/5 * * * *", run: sweepUnprocessed },
   // Full-text translations of newly selected items (model calls; off with MODEL_CALLS_ENABLED=false).
-  { name: "content.translate", cron: "*/5 * * * *", run: () => translatePending() },
+  ...(FEATURES.fulltextTranslation ? [{ name: "content.translate", cron: "*/5 * * * *", run: () => translatePending() }] : []),
   { name: "hot.rank", cron: "*/5 * * * *", run: () => computeHotRanking() },
   { name: "hot.snapshot", cron: "2 * * * *", run: () => snapshotHeat() },
   { name: "stories.status", cron: "7 * * * *", run: refreshStoryStatuses },
   { name: "stories.links", cron: "12 * * * *", run: linkRelatedStories },
-  { name: "reports.daily", cron: "0 8 * * *", missed: "once", run: () => composeDaily(beijingDate(Date.now())) },
-  { name: "reports.weekly", cron: "0 10 * * 1", missed: "once", run: () => composeWeekly(isoWeekLabel(addDays(beijingDate(Date.now()), -7))) },
-  {
+  { name: "reports.daily", cron: "0 8 * * *", missed: "once" as const, run: () => composeDaily(beijingDate(Date.now())) },
+  ...(FEATURES.weeklyReports ? [{ name: "reports.weekly", cron: "0 10 * * 1", missed: "once" as const, run: () => composeWeekly(isoWeekLabel(addDays(beijingDate(Date.now()), -7))) }] : []),
+  ...(FEATURES.monthlyReports ? [{
     name: "reports.monthly",
     cron: "30 10 1 * *",
-    missed: "once",
+    missed: "once" as const,
     run: () => {
       const [y, m] = beijingDate(Date.now()).split("-").map(Number) as [number, number];
       return composeMonthly(m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, "0")}`);
     },
-  },
+  }] : []),
   { name: "reports.catch-up", cron: "15 * * * *", run: () => catchUpReports() },
-  { name: "ops.retention", cron: "30 3 * * *", missed: "once", run: () => dailyRetention() },
-  { name: "sources.icons", cron: "40 4 * * *", missed: "once", run: () => refreshSourceIcons() },
+  { name: "ops.retention", cron: "30 3 * * *", missed: "once" as const, run: () => dailyRetention() },
+  { name: "sources.icons", cron: "40 4 * * *", missed: "once" as const, run: () => refreshSourceIcons() },
   // IndexNow for new indexable pages (off unless INDEXNOW_SUBMIT_ENABLED).
-  { name: "seo.indexnow", cron: "50 5 * * *", missed: "once", run: () => submitIndexNow() },
+  { name: "seo.indexnow", cron: "50 5 * * *", missed: "once" as const, run: () => submitIndexNow() },
   // Work a stopped process left half way becomes visible, and unknown paid requests get their one
   // automatic release, before the alerts look.
   {
@@ -68,11 +68,11 @@ export const SCHEDULES: Scheduled[] = [
   },
   { name: "ops.alerts", cron: "*/10 * * * *", run: () => checkAlerts() },
   // One message with the follow-ups that do not touch readers (nothing when there are none).
-  { name: "ops.digest", cron: "0 9 * * *", missed: "once", run: () => sendDigest() },
+  { name: "ops.digest", cron: "0 9 * * *", missed: "once" as const, run: () => sendDigest() },
   // Feedback that did not reach the internal Feishu chat when it was sent (off with FEISHU_INTERNAL_ENABLED).
   { name: "feedback.forward", cron: "*/10 * * * *", run: () => forwardPendingFeedback() },
   ...(backupConfigured() ? [{ name: "ops.backup", cron: "10 4 * * *", missed: "once" as const, run: () => runBackup() }] : []),
-  { name: "reports.source-health", cron: "0 9 * * 1", missed: "once", run: () => sourceHealthWeekly() },
+  { name: "reports.source-health", cron: "0 9 * * 1", missed: "once" as const, run: () => sourceHealthWeekly() },
   // Four upstream checks a day; a new run is published only when the evidence changed. With collection
   // off only the computation runs, over the snapshots already stored.
   ...(FEATURES.leaderboard

@@ -40,6 +40,7 @@ const NAV: Array<{ group: string; items: Array<{ to: string; label: string; coun
       { to: "/admin/models", label: "模型与评测" },
       { to: "/admin/selectbench", label: "SelectBench" },
       { to: "/admin/settings", label: "设置" },
+      { to: "/admin/tokens", label: "订阅令牌" },
       { to: "/admin/audit", label: "审计记录" },
     ],
   },
@@ -92,6 +93,7 @@ export default function AdminLayout({ loaderData }: Route.ComponentProps) {
             {me.dev && <span className="rounded bg-amber/15 px-1.5 text-[11px] font-medium text-amber">开发</span>}
           </div>
           <form method="post" action="/api/auth/logout" className="mt-1.5">
+            <input type="hidden" name="csrf" value={me.csrf} />
             <button type="submit" className="text-ink-4 hover:text-ink-2">退出登录</button>
           </form>
         </div>

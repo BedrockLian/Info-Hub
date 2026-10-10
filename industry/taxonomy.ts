@@ -8,12 +8,11 @@
  * 没归上类的资料在日报里放进第一个 key 为 industry 的类别所在的节（没有就放最后一节）。
  */
 export const CATEGORIES = [
-  { key: "ai-models", label: "模型", section: "模型发布/更新", guide: "新模型、模型版本、权重开放、模型能力与价格变化的发布与评测结果" },
-  { key: "ai-products", label: "产品", section: "产品发布/更新", guide: "AI 产品、功能、应用、工具、API 与平台的发布和更新" },
-  { key: "industry", label: "行业", section: "行业动态", guide: "公司经营、融资并购、人事、合作、诉讼、监管与政策、市场与基础设施" },
-  { key: "paper", label: "论文", section: "论文研究", guide: "研究论文、技术报告、基准与数据集" },
-  { key: "tip", label: "教程", section: "技巧与观点", guide: "教程、实践经验、使用技巧、提示词与工具用法、深度技术讲解" },
-  { key: "opinion", label: "观点", section: "技巧与观点", guide: "人物观点、评论、分析、访谈、现象与趋势讨论" },
+  { key: "global_affairs", label: "国际时事", section: "国际时事", guide: "国际事件、外交、安全和跨国变化" },
+  { key: "china_coverage", label: "外媒对华", section: "外媒对华", guide: "外国媒体涉及中国、香港、台湾的报道与分析" },
+  { key: "technology", label: "科技", section: "科技", guide: "科技、互联网、AI、数字权利与产业变化" },
+  { key: "games", label: "游戏", section: "游戏", guide: "游戏发布、设计、开发、商业和玩家文化" },
+  { key: "public_affairs", label: "公共事务", section: "公共事务", guide: "公共政策、制度、调查报道、社会研究与治理" },
 ] as const;
 
 /**
@@ -27,12 +26,12 @@ export const ITEM_TYPES = ["model_release", "product_launch", "tool_or_prompt", 
 /** 每篇资料的第一个标签必须是这些“分类标签”之一。 */
 export const CATEGORY_TAGS = [
   "产品更新", "模型发布", "论文/研究", "开源/仓库", "教程/实践", "现象/趋势", "大佬观点", "评测/基准", "安全/对齐", "行业动态", "政策/监管",
-  "非AI/通用工具", "其他",
+  "非AI/通用工具", "其他", "新闻报道", "调查报道", "公共政策", "评论分析", "游戏动态",
 ] as const;
 
 /** 可选的主题标签。 */
 export const TOPIC_TAGS = [
-  "Agent", "编码", "推理", "多模态", "语音", "视频", "图像生成", "RAG", "端侧", "数据/训练", "搜索", "部署/工程", "开源生态", "具身智能", "MCP/工具调用",
+  "国际时事", "外媒对华", "科技", "游戏", "公共事务", "国际关系", "中国", "香港", "台湾", "东亚", "数字权利", "公共治理", "游戏开发", "游戏产业", "独立游戏", "Agent", "编码", "推理", "多模态", "语音", "视频", "图像生成", "RAG", "端侧", "数据/训练", "搜索", "部署/工程", "开源生态", "具身智能", "MCP/工具调用",
 ] as const;
 
 /** 可选的实体标签（公司、机构、平台）。 */

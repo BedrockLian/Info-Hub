@@ -6,6 +6,7 @@ import { cached, type Cached } from "../lib/cache.ts";
 import { proxiedImage, proxiedImageSet } from "../media/imgproxy.ts";
 import { dailyUrl, itemUrl, siteUrl } from "./links.ts";
 import { SITE, withSubject } from "@aihot/industry/site";
+import { config } from '../config.ts';
 
 export type { ReportKind };
 
@@ -49,6 +50,27 @@ async function availability(ids: string[]): Promise<Map<string, Availability>> {
   return out;
 }
 
+function citations(content: Record<string, any>): Array<Record<string, any>> {
+  return [...(content.sections ?? []).flatMap((s:any)=>s.items ?? []),
+    ...(content.themes ?? []).flatMap((t:any)=>t.storyRefs ?? []), ...(content.flashes ?? [])];
+}
+
+// A lead or theme paragraph may summarize any citation. Without sentence-level provenance, discard
+// that prose as soon as one citation is no longer readable. Check current state on every private read.
+async function safeReportContent(content: Record<string, any>): Promise<Record<string, any>> {
+  if (!config.privateSite) return content;
+  const avail = await availability([...new Set(citations(content).map(i=>i.itemId).filter(Boolean))]);
+  if (!citations(content).some(i=>i.itemId && !avail.get(i.itemId)?.available)) return content;
+  const safe = structuredClone(content);
+  for (const key of ['lead','title','headline','overview']) delete safe[key];
+  const readable = (i:any)=>!i.itemId || avail.get(i.itemId)?.available === true;
+  safe.sections=(safe.sections ?? []).map((s:any)=>({...s,items:(s.items ?? []).filter(readable)}));
+  safe.themes=(safe.themes ?? []).map((t:any)=>({...t,heading:'已更新的主题',summary:null,storyRefs:(t.storyRefs ?? []).filter(readable)}));
+  safe.flashes=(safe.flashes ?? []).filter(readable);
+  safe.highlights=(safe.highlights ?? []).filter((id:string)=>avail.get(id)?.available === true);
+  return safe;
+}
+
 /** Ids among `ids` that are no longer public. Ids absent from this database stay cited as published. */
 export async function unavailableIds(ids: string[]): Promise<Set<string>> {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -61,6 +83,10 @@ export async function unavailableIds(ids: string[]): Promise<Set<string>> {
 
 /** Directory/feed metadata only: citation summaries and full report prose stay in the detail read. */
 export async function reportIndexRows(kind: ReportKind, limit: number) {
+  if (config.privateSite) {
+    const rows=await sql<{key:string;content:Record<string,any>;generated_at:Date}[]>`SELECT key,content,generated_at FROM reports WHERE kind=${kind} ORDER BY key DESC LIMIT ${limit}`;
+    return Promise.all(rows.map(async r=>({...r,content:await safeReportContent(r.content)})));
+  }
   return sql<{ key: string; content: Record<string, any>; generated_at: Date }[]>`
     SELECT key, generated_at, jsonb_build_object(
       'lead', content->'lead', 'headline', content->'headline', 'title', content->'title',
@@ -198,7 +224,7 @@ async function neighbors(kind: ReportKind, key: string): Promise<{ prev: string 
 export async function loadReport(kind: ReportKind, key: string): Promise<ReportDetail | null> {
   const [r] = await sql<ReportRow[]>`SELECT kind, key, window_start, window_end, content, generated_at, revision FROM reports WHERE kind = ${kind} AND key = ${key}`;
   if (!r) return null;
-  const c = r.content;
+  const c = await safeReportContent(r.content);
   const rawItems: Array<Record<string, any>> = [
     ...(c.sections ?? []).flatMap((s: any) => s.items ?? []),
     ...(c.flashes ?? []),
@@ -259,6 +285,7 @@ export async function loadReport(kind: ReportKind, key: string): Promise<ReportD
 const INDEX_LIMIT = 400;
 const indexes = new Map<ReportKind, Cached<{ rows: Awaited<ReturnType<typeof reportIndexRows>>; gone: Set<string> }>>();
 export function reportIndex(kind: ReportKind) {
+  if (config.privateSite) return (async()=>{const rows=await reportIndexRows(kind,INDEX_LIMIT);return {rows,gone:await unavailableHeadlineIds(rows,kind === 'daily'?'daily':'periodic')};})();
   let entry = indexes.get(kind);
   if (!entry) {
     entry = cached(async () => {
@@ -315,7 +342,7 @@ export async function v1Daily(date: string | "latest") {
     ? await sql<ReportRow[]>`SELECT kind, key, window_start, window_end, content, generated_at, revision FROM reports WHERE kind = 'daily' ORDER BY key DESC LIMIT 1`
     : await sql<ReportRow[]>`SELECT kind, key, window_start, window_end, content, generated_at, revision FROM reports WHERE kind = 'daily' AND key = ${date}`;
   if (!r) return null;
-  const c = r.content;
+  const c = await safeReportContent(r.content);
   const raw = [...(c.sections ?? []).flatMap((s: any) => s.items ?? []), ...(c.flashes ?? [])];
   const avail = await availability([...new Set(raw.map((i: any) => i.itemId).filter(Boolean))] as string[]);
   const ok = (i: any) => !i.itemId || (avail.get(i.itemId)?.available ?? true);

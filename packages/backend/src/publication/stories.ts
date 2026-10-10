@@ -8,6 +8,7 @@ import { behindSources, sourceClocks } from "../events/hot.ts";
 import { storyStatusFor } from "../events/digest.ts";
 import { itemUrl, storyApiUrl, storyUrl } from "./links.ts";
 import { SITE } from "@aihot/industry/site";
+import { config } from '../config.ts';
 
 export type StoryLookup = { kind: "found"; storyId: number; publicId: string } | { kind: "merged"; target: string } | { kind: "not_found" };
 
@@ -109,7 +110,10 @@ async function storyContent(storyId: number, now: Date) {
 async function relatedStories(storyId: number) {
   return sql<{ public_id: string; title: string; relation: "storyline" | "related"; latest_at: Date | null }[]>`
     SELECT st.public_id::text, st.title, l.relation, st.latest_at FROM story_links l JOIN stories st ON st.id = l.other_id
-    WHERE l.story_id = ${storyId} AND st.merged_into IS NULL ORDER BY st.latest_at DESC NULLS LAST LIMIT 8`;
+    WHERE l.story_id = ${storyId} AND st.merged_into IS NULL AND EXISTS (
+      SELECT 1 FROM facts f JOIN fact_articles fa ON fa.fact_id=f.id JOIN publications p ON p.article_id=fa.article_id
+      WHERE f.story_id=st.id AND p.visibility='public' AND p.eligible)
+    ORDER BY st.latest_at DESC NULLS LAST LIMIT 8`;
 }
 
 export async function loadStoryDetail(storyId: number, now = new Date()): Promise<StoryDetail | null> {
@@ -193,6 +197,7 @@ const coversPending = new Map<number, Promise<HotCoverMap>>();
 
 /** A picture per story from its public full-text reports, the representative first, wide enough for a card. */
 async function hotCovers(rankingId: number, entries: Array<{ storyId: number; representativeItemId: string | null }>, at: Date) {
+  if (config.privateSite) return queryHotCovers(entries,at);
   if (coversCache?.rankingId === rankingId) return coversCache.covers;
   const pending = coversPending.get(rankingId);
   if (pending) return pending;

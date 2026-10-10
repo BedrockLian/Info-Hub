@@ -1,0 +1,57 @@
+# Info-Hub 部署与回退
+
+当前目标：`news.blian117.dpdns.org` → `43.128.10.41`，服务器主机名 `VM-0-4-opencloudos`。现有站点返回 410。共享 Nginx 主配置、`bedrock117.dpdns.org`、PHP、MySQL、trendradar-postgres 及其数据目录均不在改造范围。
+
+## 网络限制与 Windows 部署
+
+当前 Codex 工作环境到服务器的 TCP/SSH 通道不可用，GitHub Actions Secrets/权限接口也返回 403。代码测试和发布包准备可在这里完成；实际服务器部署需要从你的可信 Windows 环境执行。
+
+1. 将 Info-Hub 开发分支检出到本机，或更新已有本机仓库。SSH 私钥和原有 known_hosts 放在本机 `.ssh`；不要将明文 ZIP 或私钥提交到 Git。
+2. 打开 PowerShell，执行：
+
+```powershell
+powershell -File "<Info-Hub路径>\ops\deploy\windows.ps1" -RepositoryPath "<Info-Hub路径>" -SshDirectory "$env:USERPROFILE\.ssh"
+```
+
+脚本先只读检查主机名、Docker、证书、目标 vhost 和 Nginx 配置，再上传已提交版本的发布包。它明确使用上传的身份文件和严格 known_hosts 校验，不执行 ZIP 中的 SSH config。可核对服务器 ED25519 指纹：`SHA256:TtqUknO3nzVo19SaK2YdX8B82zo/5sNskeFbJqioLyk`。
+
+发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
+
+成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。
+
+## 启用新闻处理
+
+使用 SSH 编辑 `/opt/infohub/shared/.env`：
+
+```dotenv
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-flash
+LLM_EXTRA_JSON={"thinking":{"type":"disabled"}}
+LLM_API_KEY=<只在服务器填写>
+COLLECT_ENABLED=true
+MODEL_CALLS_ENABLED=true
+MODEL_BUDGET_DAY_USD=0.50
+MODEL_BUDGET_30D_USD=10
+```
+
+在 `/opt/infohub/current` 运行 `INFOHUB_RELEASE=<当前commit> docker compose -p infohub up -d --force-recreate api worker web`。查看 `/admin/settings` 金额与请求上限、`/admin/runs` 回执和错误。后台不能绕过谷价或金额熔断。首次回填每源最多 8 条；旧模型榜、Codex 监控、自动全文翻译和自动周月报关闭。
+
+RSS 阅读器须支持自定义 `Authorization: Bearer <令牌>` 请求头。令牌在 `/admin/tokens` 创建，数据库只保存摘要，可设有效期或撤销；不接受查询字符串中的 token。令牌没有后台权限。
+
+## 谷价与预算依据
+
+2026-10-10 核对官方价格：https://api-docs.deepseek.com/quick_start/pricing 。Flash 谷价为每百万输入 token $0.15、输出 $0.60；缓存命中更便宜，预算不计这个折扣。峰时是工作日 UTC 01:00–04:00、06:00–10:00，即北京时间 09:00–12:00、14:00–18:00。周末全日谷价。谷价结束前按请求超时加 30 秒停止接收新模型请求。
+
+规划使用 `node scripts/cost-plan.ts`，是假设而非实测：60% 候选通过，预筛 3800/160 token；每个通过项两次评分各 7000/24、结构 3000/220、写作 3500/400；另假设 50% 需归组 7000/180、15% 需综述 6000/350，每日日报 10000/900。
+
+| 每天候选 | 估计日费用 USD | 估计30天 USD |
+|---:|---:|---:|
+|60|0.194|5.82|
+|100|0.322|9.66|
+|150|0.482|14.46|
+
+因此初期上限设为每日 $0.50、30 天 $10；高于约 100 候选/天时可能积压，不自动加预算。首周用实际回执的 token 用量校准。费用预留用最终请求 UTF-8 字节上界和最大输出量，完成后以谷价估算结算；超时、崩溃及未知用量保留预留额，重试独立预留。此上限控制本站估算值，服务商价格调整或账单规则变化需更新定价再启用；不是服务商账户额度。没有真实模型请求，不能宣称实测费用或筛选准确率。
+
+## 回退
+
+vhost 备份和更新前数据库转储位于 `/opt/infohub/shared/backups`。恢复 vhost 后用原有 Nginx 检查并 reload。应用可切换到前一 release，设置对应 `INFOHUB_RELEASE` 再 `docker compose -p infohub up -d`。迁移仅增量，应用回退不自动删表；先核对备份再决定数据库恢复。禁止 `docker compose down -v` 用于生产回退。

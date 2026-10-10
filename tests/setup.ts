@@ -1,3 +1,4 @@
+import { before } from "node:test";
 // Shared setup for the invariant tests (node --test tests/). They write rows, so they refuse to run
 // unless DATABASE_URL names a throwaway database ending in _test or _ci (CI: a freshly migrated one).
 // Secrets are test values set here, never real credentials; paid providers are pointed at
@@ -9,6 +10,8 @@ const database = new URL(process.env.DATABASE_URL ?? "postgres://unset/unset").p
 if (!/_(test|ci)$/.test(database)) {
   throw new Error(`Invariant tests write rows: point DATABASE_URL at a throwaway database named *_test or *_ci (got "${database}")`);
 }
+process.env.PRIVATE_SITE ??= "false"; // Upstream public invariants; private-access.test explicitly enables it.
+process.env.MODEL_CALLS_ENABLED ??= "true"; // Only local provider stubs.
 process.env.AIHOT_CREDENTIALS_DIR = "/nonexistent-test-credentials";
 process.env.SESSION_SECRET ??= "test-session-secret-0123456789";
 process.env.IMG_PROXY_SIGN_SECRET ??= "test-img-secret-0123456789";
@@ -24,6 +27,16 @@ const AIHOT_MODELS: Record<string, string> = {
   REPORT_MODEL: "deepseek-flash", TRANSLATE_MODEL: "deepseek-flash", MONITOR_MODEL: "deepseek-flash",
 };
 for (const [name, model] of Object.entries(AIHOT_MODELS)) process.env[name] ??= model;
+
+// Local stubs complete hundreds of requests in seconds; production rate limits would obscure the
+// behavior under test. This hook is only reachable after the *_test / *_ci database-name guard.
+// Budget-specific tests install and restore their own restrictive limits.
+before(async () => {
+  const {default:postgres} = await import('postgres');
+  const testDb=postgres(process.env.DATABASE_URL!,{max:1});
+  try {await testDb`UPDATE budgets SET per_minute=1000, per_hour=10000, per_day=50000`;}
+  finally {await testDb.end();}
+});
 
 /**
  * A local HTTP stub standing in for a paid provider; `answer` builds every response from the request

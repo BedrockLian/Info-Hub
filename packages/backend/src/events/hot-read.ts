@@ -1,6 +1,7 @@
 // Reading the latest published hot ranking. The web shows heat values; machine exits only ranks.
 import type { HotParticipant, HotStripEntry } from "@aihot/contracts/site";
 import { sql } from "../db.ts";
+import { config } from '../config.ts';
 import { proxiedImage, proxiedImageSet } from "../media/imgproxy.ts";
 
 export interface HotEntry {
@@ -46,6 +47,7 @@ export interface HotRanking {
 let rankingPending: Promise<HotRanking | null> | null = null;
 
 export function latestHotRanking(): Promise<HotRanking | null> {
+  if (config.privateSite) return queryLatestHotRanking();
   rankingPending ??= queryLatestHotRanking().finally(() => { rankingPending = null; });
   return rankingPending;
 }
@@ -54,6 +56,17 @@ async function queryLatestHotRanking(): Promise<HotRanking | null> {
   const [row] = await sql<{ id: number; computed_at: Date; rule_version: string; entries: HotEntry[]; evidence: Record<string, unknown> | null }[]>`
     SELECT id, computed_at, rule_version, entries, evidence FROM hot_rankings WHERE published ORDER BY computed_at DESC LIMIT 1`;
   if (!row) return null;
+  if (config.privateSite && row.entries.length) {
+    const live=await sql<{id:number;title:string;article_id:string;url:string;source_name:string}[]>`
+      SELECT DISTINCT ON (st.id) st.id,st.title,p.article_id,p.url,s.name AS source_name
+      FROM stories st JOIN facts f ON f.story_id=st.id JOIN fact_articles fa ON fa.fact_id=f.id
+      JOIN publications p ON p.article_id=fa.article_id JOIN sources s ON s.id=p.source_id
+      WHERE st.id=ANY(${row.entries.map(e=>e.storyId)}::bigint[]) AND st.merged_into IS NULL
+      AND p.visibility='public' AND p.eligible AND (NOT p.selected OR p.visible_after<=now())
+      ORDER BY st.id,p.first_party DESC,p.timeline_at`;
+    const byId=new Map(live.map(r=>[Number(r.id),r]));
+    row.entries=row.entries.filter(e=>byId.has(e.storyId)).map(e=>{const r=byId.get(e.storyId)!;return {...e,title:r.title,representativeItemId:r.article_id,representativeUrl:r.url,representativeSource:r.source_name};});
+  }
   return { id: row.id, computedAt: row.computed_at.toISOString(), ruleVersion: row.rule_version, entries: row.entries, coverage: row.evidence };
 }
 
@@ -66,7 +79,8 @@ let extrasCache: { rankingId: number; extras: Extras } | null = null;
 const extrasPending = new Map<number, Promise<Extras>>();
 
 async function readExtras(ranking: HotRanking): Promise<Extras> {
-  if (extrasCache?.rankingId === ranking.id) return extrasCache.extras;
+  if (config.privateSite) return queryExtras(ranking);
+  if (!config.privateSite && extrasCache?.rankingId === ranking.id) return extrasCache.extras;
   const pending = extrasPending.get(ranking.id);
   if (pending) return pending;
   const load = queryExtras(ranking);

@@ -6,8 +6,8 @@ import { config, credential } from "../config.ts";
 import { sql } from "../db.ts";
 import { sha256 } from "../lib/ids.ts";
 
-export const SESSION_COOKIE = "aihot_admin";
-export const STATE_COOKIE = "aihot_oauth_state";
+export const SESSION_COOKIE = "infohub_session";
+export const STATE_COOKIE = "infohub_oauth_state";
 export const SESSION_DAYS = 30;
 /** Register this callback in the Feishu open platform when Feishu sign-in is used. */
 export const CALLBACK_URL = `${config.siteUrl}/api/auth/callback`;
@@ -48,7 +48,9 @@ export function parseCookies(header: string | undefined): Record<string, string>
   const out: Record<string, string> = {};
   for (const part of (header ?? "").split(";")) {
     const i = part.indexOf("=");
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i > 0) {
+      try { out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim()); } catch { /* malformed cookies do not authenticate */ }
+    }
   }
   return out;
 }
@@ -68,17 +70,11 @@ export function loginRedirect(returnTo: string): { url: string; stateCookie: str
 
 /** Only admin paths on this site; anything else (other hosts, protocol-relative) falls back to /admin. */
 export function safeReturn(target: string): string {
-  let path = target;
-  // A proxy's login redirect may pass the whole original URL; keep only its path and query.
-  if (/^https?:\/\//i.test(path)) {
-    try {
-      const u = new URL(path);
-      path = `${u.pathname}${u.search}`;
-    } catch {
-      return "/admin";
-    }
-  }
-  return /^\/admin(\/|\?|$)/.test(path) && !path.startsWith("//") ? path : "/admin";
+  if (!target.startsWith("/") || target.startsWith("//") || /[\\\x00-\x20]/.test(target)) return "/";
+  let decoded: string;
+  try { decoded = decodeURIComponent(target); } catch { return "/"; }
+  if (decoded.startsWith("//") || /[\\\x00-\x20]/.test(decoded) || /^\/admin\/login(?:[/?#]|$)/.test(decoded)) return "/";
+  return target;
 }
 
 interface FeishuUser {

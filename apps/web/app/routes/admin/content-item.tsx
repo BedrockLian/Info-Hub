@@ -54,7 +54,7 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
   const { run, pending } = useAdminAction();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [visibility, setVisibility] = useState<string>(p?.visibility ?? "public");
-  const [fields, setFields] = useState({ title: "", summary: "", reason: "", category: "", tags: "", selected: "", silent: "" });
+  const [fields, setFields] = useState({ title: "", summary: "", reason: "", category: "", tags: "", selected: "", silent: "", relevance: "" });
   const [mergeInto, setMergeInto] = useState("");
   const version = c.override?.version ?? 0;
   const base = `/api/admin/content/${encodeURIComponent(a.id)}`;
@@ -69,6 +69,7 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
       reason: String(f.reason ?? ""),
       category: String(f.category ?? ""),
       tags: Array.isArray(f.tags) ? (f.tags as string[]).join(", ") : "",
+      relevance: String(f.relevance ?? ""),
       selected: f.selected === undefined ? "" : String(f.selected),
       silent: f.silent === undefined ? "" : String(f.silent),
     });
@@ -163,6 +164,7 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
                         {an.category && <Badge>{CATEGORY_LABELS[an.category as keyof typeof CATEGORY_LABELS] ?? an.category}</Badge>}
                         <span className="text-ink-4">{an.model} · {an.prompt_version} · 输入 v{an.input_revision} · {an.origin} · {bj(an.created_at)}</span>
                       </div>
+                      {an.output?.prefilter && <div className="mt-2 text-sm text-ink-3"><strong>个人内容判断：{an.output.prefilter.personalDisposition === "pass" ? "通过" : an.output.prefilter.personalDisposition === "exclude" ? "排除" : "待审"}</strong><p>{an.output.prefilter.personalReason}</p>{(an.output.prefilter.personalEvidence ?? []).map((quote:string,i:number)=><blockquote key={i} className="mt-1 border-l-2 pl-3">{quote}</blockquote>)}</div>}
                       {an.title_zh && <div className="mt-2 font-medium text-ink">{an.title_zh}</div>}
                       {an.reason_zh && <div className="mt-1 text-[12.5px] leading-relaxed text-ink-3">{an.reason_zh}</div>}
                       {(an.receipts as Row[]).length > 0 && (
@@ -358,6 +360,8 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
           else if (c.override?.fields.category !== undefined) clear.push("category");
           if (fields.tags.trim()) next.tags = fields.tags.split(/[,，]/).map((t) => t.trim()).filter(Boolean);
           else if (c.override?.fields.tags !== undefined) clear.push("tags");
+          if (fields.relevance === "clear") clear.push("relevance");
+          else if (fields.relevance) next.relevance = fields.relevance;
           for (const k of ["selected", "silent"] as const) {
             if (fields[k] === "true" || fields[k] === "false") next[k] = fields[k] === "true";
             else if (c.override?.fields[k] !== undefined) clear.push(k);
@@ -366,6 +370,7 @@ export default function ContentItem({ loaderData }: Route.ComponentProps) {
         }}
       >
         <Field label="标题"><Input value={fields.title} placeholder={p?.title ?? ""} onChange={(e) => setFields({ ...fields, title: e.target.value })} /></Field>
+        <Field label="个人内容审核"><Select value={fields.relevance} onChange={e=>setFields({...fields,relevance:e.target.value})}><option value="">保持模型判断</option><option value="pass">人工确认通过</option><option value="block">人工排除</option><option value="unknown">待审</option><option value="clear">清除人工判断</option></Select></Field>
         <Field label="摘要"><Textarea rows={3} value={fields.summary} placeholder={p?.summary ?? ""} onChange={(e) => setFields({ ...fields, summary: e.target.value })} /></Field>
         <Field label="推荐理由"><Textarea rows={2} value={fields.reason} placeholder={p?.reason ?? ""} onChange={(e) => setFields({ ...fields, reason: e.target.value })} /></Field>
         <div className="grid gap-3 sm:grid-cols-2">
