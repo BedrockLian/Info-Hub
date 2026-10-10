@@ -120,7 +120,14 @@ server {
 NGINX
 if ! $nginx -t; then exit 1; fi
 if ! $nginx -s reload; then exit 1; fi
-https_status=$(curl -sS --connect-timeout 5 --max-time 10 --noproxy news.blian117.dpdns.org -o /dev/null -w '%{http_code}' --resolve news.blian117.dpdns.org:443:127.0.0.1 https://news.blian117.dpdns.org/) || { echo 'HTTPS transport verification failed; see the preceding curl error' >&2; exit 1; }
-[[ $https_status == 302 ]] || { echo "HTTPS verification expected 302 but received $https_status after Nginx reload" >&2; exit 1; }
+# Reload signals the master; a successful command does not mean new workers are serving yet.
+https_ready=false
+for attempt in {1..30}; do
+  https_status=$(curl -sS --connect-timeout 5 --max-time 10 --noproxy news.blian117.dpdns.org -o /dev/null -w '%{http_code}' --resolve news.blian117.dpdns.org:443:127.0.0.1 https://news.blian117.dpdns.org/) || { echo 'HTTPS transport verification failed; see the preceding curl error' >&2; exit 1; }
+  if [[ $https_status == 302 ]]; then https_ready=true; break; fi
+  if [[ $attempt == 1 || $((attempt % 5)) == 0 ]]; then echo "Waiting for news HTTPS switch: HTTP $https_status (attempt $attempt/30)"; fi
+  sleep 1
+done
+$https_ready || { echo "HTTPS verification expected 302 but received $https_status after waiting for Nginx reload" >&2; exit 1; }
 ln -sfn "$root/releases/$release" "$root/current"
 echo "Deployed release $release. Runtime secrets remain in /opt/infohub/shared/.env; models and collection stay off until configured."

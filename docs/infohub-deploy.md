@@ -27,6 +27,8 @@ Windows PowerShell 通过原生进程管道发送文本时会附加 CRLF，即�
 
 最终 HTTPS 检查直连服务器回环，保留 TLS 验证，并显示 curl 传输错误或不符合预期的 HTTP 状态。失败依然回退，不能使用 `-k` 或忽略状态强行发布。
 
+Nginx 的 reload 命令返回时，新 worker 未必已经接管请求。部署工具最多检查 30 次，每次间隔一秒，等待 news HTTPS 返回登录跳转 302；期间报告仍在收到的旧状态。若始终不符合预期或发生 TLS/传输错误，仍然回退并保留具体错误。
+
 发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
 
 成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。
