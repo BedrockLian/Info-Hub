@@ -120,6 +120,7 @@ server {
 NGINX
 if ! $nginx -t; then exit 1; fi
 if ! $nginx -s reload; then exit 1; fi
-if [[ $(curl -s -o /dev/null -w '%{http_code}' --resolve news.blian117.dpdns.org:443:127.0.0.1 https://news.blian117.dpdns.org/) != 302 ]]; then exit 1; fi
+https_status=$(curl -sS --connect-timeout 5 --max-time 10 --noproxy news.blian117.dpdns.org -o /dev/null -w '%{http_code}' --resolve news.blian117.dpdns.org:443:127.0.0.1 https://news.blian117.dpdns.org/) || { echo 'HTTPS transport verification failed; see the preceding curl error' >&2; exit 1; }
+[[ $https_status == 302 ]] || { echo "HTTPS verification expected 302 but received $https_status after Nginx reload" >&2; exit 1; }
 ln -sfn "$root/releases/$release" "$root/current"
 echo "Deployed release $release. Runtime secrets remain in /opt/infohub/shared/.env; models and collection stay off until configured."

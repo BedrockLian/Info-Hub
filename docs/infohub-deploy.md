@@ -25,6 +25,8 @@ Windows PowerShell 通过原生进程管道发送文本时会附加 CRLF，即�
 
 所有部署 Docker 子进程隔离标准输入，烟测和数据库转储禁用交互输入，防止 Docker 读取 SSH 管道中余下的部署脚本。只有完成 news vhost 切换、HTTPS 检查和 `current` release 标记后，Windows 工具才报告部署成功。若初次发布中断但本站容器已启动，可重跑；端口 18082 必须由唯一运行中的 Info-Hub Web 容器精确绑定于 `127.0.0.1`，不能以缺少 `current` 为由覆盖未知服务。数据卷保留。
 
+最终 HTTPS 检查直连服务器回环，保留 TLS 验证，并显示 curl 传输错误或不符合预期的 HTTP 状态。失败依然回退，不能使用 `-k` 或忽略状态强行发布。
+
 发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
 
 成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。
