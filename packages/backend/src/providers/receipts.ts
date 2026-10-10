@@ -182,7 +182,9 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
     const message = (error instanceof ProviderRejectedError ? error.message : String(error)).slice(0, 2000);
     await sql.begin(async (tx) => {
       await tx`UPDATE receipts SET status = ${status}, error = ${message}, updated_at = now() WHERE id = ${receiptId}`;
-      await tx`UPDATE receipt_attempts SET status = ${status}, error = ${message}, latency_ms = ${Date.now() - started}, finished_at = now() WHERE id = ${attemptId}`;
+      await tx`UPDATE receipt_attempts SET status = ${status}, error = ${message},
+        budget_charge_usd = CASE WHEN ${error instanceof ProviderRejectedError && error.status === 402} THEN 0 ELSE budget_charge_usd END,
+        latency_ms = ${Date.now() - started}, finished_at = now() WHERE id = ${attemptId}`;
     });
     throw error;
   }
