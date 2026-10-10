@@ -35,14 +35,17 @@ archive=/root/infohub-incoming-$release.tar
 [[ -f $archive ]]
 # Never replace an unknown service on the intended loopback port.
 if [[ -n $(ss -ltnH 'sport = :18082') ]]; then
-  [[ -L $root/current ]] || { echo 'Port 18082 belongs to an unknown service; nothing changed'; exit 1; }
+  web_container=$(docker ps --filter label=com.docker.compose.project=infohub --filter label=com.docker.compose.service=web --format '{{.ID}}' < /dev/null)
+  [[ -n $web_container && $web_container != *$'\n'* ]] || { echo 'Port 18082 belongs to an unknown service; nothing changed'; exit 1; }
+  web_binding=$(docker inspect --format '{{range (index .HostConfig.PortBindings "3000/tcp")}}{{.HostIp}}:{{.HostPort}}{{"\n"}}{{end}}' "$web_container" < /dev/null)
+  [[ $web_binding == 127.0.0.1:18082 ]] || { echo 'Port 18082 is not the expected Info-Hub loopback binding; nothing changed'; exit 1; }
 fi
 mkdir -p "$root/releases/$release" "$root/shared/backups"
 chmod 700 "$root/shared"
 tar -xf "$archive" -C "$root/releases/$release"
 cd "$root/releases/$release"
 if [[ ! -f $root/shared/.env ]]; then
-  docker run --rm -v "$PWD:/app" -w /app node:24-trixie-slim node scripts/init-env.ts --quiet
+  docker run --rm -v "$PWD:/app" -w /app node:24-trixie-slim node scripts/init-env.ts --quiet < /dev/null
   mv .env "$root/shared/.env"
 fi
 chmod 600 "$root/shared/.env"
@@ -62,21 +65,21 @@ rollback_on_error() {
   if $app_changed; then
     if [[ -n $previous && -f $previous/docker-compose.yml ]]; then
       echo 'Restoring previous Info-Hub application release'
-      INFOHUB_RELEASE=$(basename "$previous") docker compose -p infohub -f "$previous/docker-compose.yml" up -d --no-build
+      INFOHUB_RELEASE=$(basename "$previous") docker compose -p infohub -f "$previous/docker-compose.yml" up -d --no-build < /dev/null
     else
-      docker compose -p infohub stop web api worker
+      docker compose -p infohub stop web api worker < /dev/null
     fi
   fi
   echo 'Deployment failed; review /opt/infohub/shared/backups and the command output.' >&2
 }
 trap rollback_on_error EXIT
 if [[ -n $previous && -f $previous/docker-compose.yml ]]; then
-  docker compose -p infohub -f "$previous/docker-compose.yml" exec -T db pg_dump -U infohub -d infohub > "$root/shared/backups/database-$(date -u +%Y%m%dT%H%M%SZ).sql"
+  docker compose -p infohub -f "$previous/docker-compose.yml" exec -T --interactive=false db pg_dump -U infohub -d infohub < /dev/null > "$root/shared/backups/database-$(date -u +%Y%m%dT%H%M%SZ).sql"
 fi
 # Own service lifecycle only. No shared databases, PHP, other vhosts or Nginx main config.
-docker compose -p infohub build
+docker compose -p infohub build < /dev/null
 app_changed=true
-docker compose -p infohub up -d
+docker compose -p infohub up -d < /dev/null
 ready=false
 for _ in {1..60}; do
   code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/ || true)
@@ -86,7 +89,7 @@ done
 $ready || { echo 'Info-Hub did not become ready; vhost was not changed'; exit 1; }
 [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/) == 302 ]]
 [[ $(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/feed.xml) == 401 ]]
-docker compose -p infohub run --rm --no-deps -e API_BASE_URL=http://api:3001 setup node scripts/private-smoke.ts --base http://web:3000
+docker compose -p infohub run --rm --no-deps --interactive=false -T -e API_BASE_URL=http://api:3001 setup node scripts/private-smoke.ts --base http://web:3000 < /dev/null
 vhost_backup="$root/shared/backups/news-vhost-$(date -u +%Y%m%dT%H%M%SZ).conf"
 cp -p "$vhost" "$vhost_backup"
 cat > "$vhost" <<'NGINX'

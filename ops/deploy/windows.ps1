@@ -40,6 +40,9 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Uploading release failed.' }
   Get-Content -Raw $serverScript | & ssh @sshOptions -p 22 $target "$scriptReceiver -- deploy $release"
   if ($LASTEXITCODE -ne 0) { throw 'Deployment failed. Keep the output for diagnosis.' }
+  # Require the final marker, written only after the news vhost and HTTPS check succeed.
+  & ssh @sshOptions -p 22 $target "test -L /opt/infohub/current && test /opt/infohub/releases/$release -ef /opt/infohub/current"
+  if ($LASTEXITCODE -ne 0) { throw 'Deployment did not record the verified current release. Site publication is incomplete; keep the output for diagnosis.' }
   # Download the runtime credentials outside Git, so the owner can read the generated login password.
   $runtimeFile = Join-Path $SshDirectory 'InfoHub-runtime.env'
   & scp @sshOptions -P 22 "${target}:/opt/infohub/shared/.env" $runtimeFile

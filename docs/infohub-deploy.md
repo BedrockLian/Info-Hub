@@ -23,6 +23,8 @@ powershell -File "<Info-Hub路径>\ops\deploy\windows.ps1" -RepositoryPath "<Inf
 
 Windows PowerShell 通过原生进程管道发送文本时会附加 CRLF，即使源 Shell 文件是 LF。部署工具在服务端统一移除实际回车字符，再交给 Bash，覆盖环境准备、预检和部署三阶段。已安装 Docker 和插件后，普通部署命令即可继续；无需重复安装。`-PrepareDocker` 保留为需要时可重跑的环境准备选项。
 
+所有部署 Docker 子进程隔离标准输入，烟测和数据库转储禁用交互输入，防止 Docker 读取 SSH 管道中余下的部署脚本。只有完成 news vhost 切换、HTTPS 检查和 `current` release 标记后，Windows 工具才报告部署成功。若初次发布中断但本站容器已启动，可重跑；端口 18082 必须由唯一运行中的 Info-Hub Web 容器精确绑定于 `127.0.0.1`，不能以缺少 `current` 为由覆盖未知服务。数据卷保留。
+
 发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
 
 成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。
