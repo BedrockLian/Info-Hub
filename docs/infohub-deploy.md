@@ -15,6 +15,8 @@ powershell -File "<Info-Hub路径>\ops\deploy\windows.ps1" -RepositoryPath "<Inf
 
 脚本先只读检查主机名、Docker、证书、目标 vhost 和 Nginx 配置，再上传已提交版本的发布包。它明确使用上传的身份文件和严格 known_hosts 校验，不执行 ZIP 中的 SSH config。可核对服务器 ED25519 指纹：`SHA256:TtqUknO3nzVo19SaK2YdX8B82zo/5sNskeFbJqioLyk`。
 
+预检失败时，保留从 `Connecting to the server` 开始的输出。脚本逐项报告服务器身份、Docker Compose、Docker 守护进程、站点配置与证书、Nginx 配置；失败后不上传发布包，也不修改服务。仅排查时在上述 PowerShell 命令末尾加 `-PreflightOnly`，即使预检成功也不会继续部署。
+
 发布目录 `/opt/infohub/releases/<commit>`；运行密钥 `/opt/infohub/shared/.env`；项目名 `infohub`。只创建自己的容器、卷和路径；仅 Web 绑定宿主机回环 18082。先完成迁移、种子及认证冒烟，再替换目标 news vhost 并运行原有 Nginx `-t`、reload。部署失败会还原原 vhost 与前一应用 release；初次部署失败只停止本站应用。不会自动删除任何旧数据。
 
 成功后脚本将运行配置下载到本机 `.ssh/InfoHub-runtime.env`，访问密码为其中 `ADMIN_PASSWORD`。该文件含密钥，保存在 Git 外。初次部署保持采集、模型和外发关闭。

@@ -7,13 +7,25 @@ root=/opt/infohub
 nginx=/www/server/nginx/sbin/nginx
 vhost=/www/server/panel/vhost/nginx/news.blian117.dpdns.org.conf
 cert=/www/server/panel/vhost/cert/news.blian117.dpdns.org
-[[ $(id -u) == 0 ]] || { echo 'Deployment requires the supplied root account'; exit 1; }
-[[ $(hostname) == VM-0-4-opencloudos ]] || { echo 'Unexpected server; nothing changed'; exit 1; }
-command -v docker >/dev/null
-command -v curl >/dev/null
-docker compose version >/dev/null
-[[ -x $nginx && -f $vhost && -s $cert/fullchain.pem && -s $cert/privkey.pem ]]
-$nginx -t
+preflight_fail() { echo "Preflight failed: $*" >&2; exit 1; }
+echo 'Starting read-only server preflight'
+[[ $(id -u) == 0 ]] || preflight_fail 'The supplied root account is required'
+server_hostname=$(hostname)
+[[ $server_hostname == VM-0-4-opencloudos ]] || preflight_fail "Unexpected server: $server_hostname; expected VM-0-4-opencloudos"
+echo "Server identity: OK ($server_hostname)"
+command -v docker >/dev/null || preflight_fail 'Docker executable is missing'
+command -v curl >/dev/null || preflight_fail 'curl executable is missing'
+docker compose version >/dev/null || preflight_fail 'Docker Compose v2 is unavailable'
+echo 'Docker Compose: OK'
+docker info >/dev/null || preflight_fail 'Docker daemon is unavailable'
+echo 'Docker daemon: OK'
+[[ -x $nginx ]] || preflight_fail "Nginx executable is missing or not executable: $nginx"
+[[ -f $vhost ]] || preflight_fail "The news vhost is missing: $vhost"
+[[ -s $cert/fullchain.pem ]] || preflight_fail "TLS certificate is missing or empty: $cert/fullchain.pem"
+[[ -s $cert/privkey.pem ]] || preflight_fail "TLS certificate key is missing or empty: $cert/privkey.pem"
+echo 'News vhost and TLS files: OK'
+$nginx -t || preflight_fail 'Nginx configuration check failed; see the preceding Nginx error'
+echo 'Nginx configuration: OK'
 if [[ $mode == preflight ]]; then
   echo 'Preflight OK: Docker and the news vhost/certificate exist. Other applications are outside deployment scope.'
   exit 0
