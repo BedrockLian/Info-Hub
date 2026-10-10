@@ -67,8 +67,8 @@ app_changed=true
 docker compose -p infohub up -d
 ready=false
 for _ in {1..60}; do
-  code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/admin/login || true)
-  if [[ $code == 200 ]]; then ready=true; break; fi
+  code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18082/ || true)
+  if [[ $code == 302 ]]; then ready=true; break; fi
   sleep 1
 done
 $ready || { echo 'Info-Hub did not become ready; vhost was not changed'; exit 1; }

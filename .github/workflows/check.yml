@@ -65,7 +65,12 @@ jobs:
         run: |
           node apps/api/src/main.ts > "$RUNNER_TEMP/api.log" 2>&1 &
           (cd apps/web && NODE_ENV=production exec node server.ts) > "$RUNNER_TEMP/web.log" 2>&1 &
-          for i in $(seq 1 60); do curl -fsS -o /dev/null http://127.0.0.1:3000/admin/login 2>/dev/null && break; sleep 1; done
+          ready=false
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3001/health 2>/dev/null && curl -fsS -o /dev/null http://127.0.0.1:3000/admin/login 2>/dev/null; then ready=true; break; fi
+            sleep 1
+          done
+          $ready || { echo 'API and Web did not become ready'; exit 1; }
           node scripts/private-smoke.ts --base http://127.0.0.1:3000
       # After the smoke check, which reads an empty database: these write their own rows.
       - name: Backend tests
