@@ -8,7 +8,7 @@ import { config, credential } from "../config.ts";
 import { sha256 } from "../lib/ids.ts";
 import { completeReceipt, paidRequest, BudgetExceededError, ProviderRejectedError, rejectReceivedResponse } from "./receipts.ts";
 import { sql } from "../db.ts";
-import { REASONING_BY_PURPOSE, REASONING_OUTPUT_FLOOR, REASONING_POLICY_VERSION } from '@aihot/industry/reasoning';
+import { REASONING_BY_PURPOSE, REASONING_OUTPUT_FLOOR, REASONING_POLICY_VERSION, inferenceGuidance, INFERENCE_GUIDANCE_VERSION } from '@aihot/industry/reasoning';
 
 export interface ModelSpec {
   key: string;
@@ -187,12 +187,14 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   }
   const thinking = (extra.thinking as { type?: unknown } | undefined)?.type;
   const thinkingEnabled = effort !== undefined && effort !== 'none';
+  const guidance = effort !== undefined ? inferenceGuidance(opts.purpose) : null;
+  const system = [opts.system,guidance?.instruction].filter(Boolean).join('\n\n');
   const body: Record<string, unknown> = {
     ...extra,
     model: spec.model,
     messages: [
-      // A prompt given as one user message (the title/summary prompts) has no system message.
-      ...(opts.system ? [{ role: "system", content: opts.system }] : []),
+      // Preserve one-message prompts unless the private-site guidance supplies a system instruction.
+      ...(system ? [{ role: "system", content: system }] : []),
       // Multimodal parts go through as parts; plain objects are sent as JSON text.
       { role: "user", content: typeof opts.user === "string" || Array.isArray(opts.user) ? opts.user : userText },
     ],
@@ -213,8 +215,10 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
       model: spec.model,
       purpose: opts.purpose,
       subject: opts.subject,
-      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(opts.system), user: sha256(userText), ...(thinkingEnabled ? {} : {temperature}), maxTokens, extra },
-      requestSummary: { promptVersion: opts.promptVersion, systemHash: sha256(opts.system), userHash: sha256(userText), userChars: userText.length, ...(thinkingEnabled ? {} : {temperature}), maxTokens,
+      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(system), user: sha256(userText), ...(thinkingEnabled ? {} : {temperature}), maxTokens, extra },
+      requestSummary: { promptVersion: opts.promptVersion, systemHash: sha256(system), userHash: sha256(userText), userChars: userText.length, ...(thinkingEnabled ? {} : {temperature}), maxTokens,
+        instructionPolicy: guidance ? INFERENCE_GUIDANCE_VERSION : null,
+        softThinkingTokens: guidance?.softThinkingTokens ?? null,
         thinking: typeof thinking === 'string' ? thinking : null,
         reasoningEffort: typeof extra.reasoning_effort === 'string' ? extra.reasoning_effort : null,
         reasoningPolicy: effort !== undefined ? REASONING_POLICY_VERSION : null },

@@ -6,6 +6,7 @@ import {chatJson,ModelOutputError} from '@aihot/backend/providers/llm';
 import {config} from '@aihot/backend/config';
 import {sql,closeDb} from '@aihot/backend/db';
 import {BudgetExceededError} from '@aihot/backend/providers/receipts';
+import {sha256} from '@aihot/backend/lib/ids';
 
 const subject=`reasoning-${tag()}`;
 const requests: Record<string,any>[]=[];
@@ -53,6 +54,10 @@ test('private Flash sends scene-specific effort instead of the conflicting globa
     assert.equal(row!.request.reasoningEffort,effort);
     assert.equal(row!.request.maxTokens,tokens);
     assert.equal(row!.request.reasoningPolicy,'infohub-scenes-v1');
+    assert.equal(row!.request.instructionPolicy,'infohub-concise-v1');
+    assert.match(sent.messages[0].content,/执行篇幅约束/);
+    assert.equal(row!.request.systemHash,sha256(sent.messages[0].content),'receipt hashes the actual augmented prompt');
+    if(effort!=='none')assert.ok(row!.request.softThinkingTokens>0);
   }
 });
 
@@ -74,6 +79,7 @@ test('unknown purposes and public deployments retain explicit provider configura
     await call(purpose);
     assert.equal(requests.at(-1)!.thinking.type,'disabled');
     assert.equal(requests.at(-1)!.max_tokens,512);
+    assert.ok(!requests.at(-1)!.messages[0].content.includes('执行篇幅约束'));
   }
   config.privateSite=false;
   try {

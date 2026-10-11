@@ -1,5 +1,5 @@
 {
-  "$comment": "个人核心 RSS，29 项；2026-10-11 按用户确认新增 5 项。候选来自 plenaryapp/awesome-rss-feeds，TechCrunch 使用官方地址，Eurogamer 使用评测子源。文章按内容分类，信源标签不强制分类。",
+  "$comment": "个人核心RSS，50项；2026-10-11按既有六主题补充媒体、一手机构及作者。目录发现与官方订阅补充，新增21项经云端RSS和样文读取核验；文章按内容分类，来源标签不强制分类，默认仅摘要和原文链接。",
   "sources": [
     {
       "id": "radar-bbc-world",
@@ -602,6 +602,455 @@
       },
       "tier": "T2",
       "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-schneier",
+      "name": "Bruce Schneier",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.schneier.com/feed/atom/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        },
+        "ingestNoiseFilter": {
+          "dropMarkersTitleOnly": [
+            "friday squid blogging"
+          ]
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-african-arguments",
+      "name": "African Arguments",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://africanarguments.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "国际时事"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-global-voices",
+      "name": "Global Voices",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://globalvoices.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "国际时事"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-china-media-project",
+      "name": "China Media Project",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://chinamediaproject.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "对华报道"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-martin-fowler",
+      "name": "Martin Fowler",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://martinfowler.com/feed.atom",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-twreporter",
+      "name": "報導者 The Reporter",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.twreporter.org/a/rss2.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "东亚"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-nippon",
+      "name": "Nippon.com English",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.nippon.com/en/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "东亚"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-eff",
+      "name": "EFF Deeplinks",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.eff.org/rss/updates.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-krebs",
+      "name": "Krebs on Security",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://krebsonsecurity.com/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-simon-willison",
+      "name": "Simon Willison",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://simonwillison.net/atom/entries/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-mozilla-ai",
+      "name": "Mozilla.ai",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://blog.mozilla.ai/rss/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-google-research",
+      "name": "Google Research",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://research.google/blog/rss/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-github-engineering",
+      "name": "GitHub Engineering",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://github.blog/engineering/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-construction-physics",
+      "name": "Construction Physics — Brian Potter",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.construction-physics.com/feed",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-xbox-wire",
+      "name": "Xbox Wire",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://news.xbox.com/en-us/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-automaton-west",
+      "name": "AUTOMATON WEST",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://automaton-media.com/en/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        },
+        "denyCategories": [
+          "Non-Gaming News"
+        ]
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-godot",
+      "name": "Godot Engine",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://godotengine.org/rss.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "游戏"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-our-world-in-data",
+      "name": "Our World in Data",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://ourworldindata.org/atom.xml",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-carbon-brief",
+      "name": "Carbon Brief",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.carbonbrief.org/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "公共事务"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-ken-shirriff",
+      "name": "Ken Shirriff",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.righto.com/feeds/posts/default",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "owner_entity_id": null,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "科技"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-amnesty",
+      "name": "Amnesty International",
+      "kind": "rss",
+      "config": {
+        "feedUrl": "https://www.amnesty.org/en/latest/feed/",
+        "_aihot": {
+          "initialBackfillLimit": 8
+        }
+      },
+      "tier": "T1",
+      "first_party": true,
       "owner_entity_id": null,
       "participation_mode": "editorial",
       "interval_minutes": 120,
