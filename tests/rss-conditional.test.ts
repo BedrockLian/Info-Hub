@@ -12,18 +12,20 @@ const T = tag();
 let version = 1;
 let broken = false;
 let redirectNew = false;
+let additionalEntry = false;
 const requests: Array<{ path: string; etag?: string; modified?: string }> = [];
 const modified = 'Mon, 28 Sep 2026 10:00:00 GMT';
 const server = http.createServer((req, res) => {
   const path = req.url ?? '/';
+  const isFeed = path === '/feed.xml' || path === '/private.xml';
   requests.push({ path, etag: req.headers['if-none-match'], modified: req.headers['if-modified-since'] });
   if (path === '/redirect') { res.writeHead(302, { location: redirectNew ? '/new.xml' : '/old.xml' }); res.end(); return; }
-  const etag = path === '/modified.xml' ? undefined : path === '/feed.xml' ? `"v${version}"` : '"shared"';
+  const etag = path === '/modified.xml' ? undefined : isFeed ? `"v${version}"` : '"shared"';
   if ((etag && req.headers['if-none-match'] === etag) || (!etag && req.headers['if-modified-since'] === modified)) {
     res.writeHead(304, { ...(etag ? { etag } : {}), 'last-modified': modified }); res.end(); return;
   }
-  const entries = Array.from({ length: path === '/feed.xml' ? 40 : 1 }, (_, i) =>
-    `<item><title>Entry ${i} ${path === '/feed.xml' && i === 0 ? version : path} ${T}</title><link>https://example.org/rss-conditional-${T}/${path.replaceAll('/', '')}/${i}</link><pubDate>${new Date(Date.now() - 1000 * i).toUTCString()}</pubDate></item>`).join('');
+  const entries = (additionalEntry && isFeed ? `<item><title>Fresh entry ${T}</title><link>https://example.org/rss-conditional-${T}/fresh</link></item>` : '') + Array.from({ length: isFeed ? 40 : 1 }, (_, i) =>
+    `<item><title>Entry ${i} ${isFeed && i === 0 ? version : path} ${T}</title><link>https://example.org/rss-conditional-${T}/${path.replaceAll('/', '')}/${i}</link><pubDate>${new Date(Date.now() - 1000 * i).toUTCString()}</pubDate></item>`).join('');
   res.writeHead(200, { 'content-type': 'application/rss+xml', ...(etag ? { etag } : {}), 'last-modified': modified });
   res.end(broken ? '<not-feed/>' : `<rss version="2.0"><channel><title>Feed</title>${entries}</channel></rss>`);
 });
@@ -83,4 +85,24 @@ test('Last-Modified works without ETag and changing redirect targets cannot acce
   assert.equal((await collectSource(redirect)).created, 1, 'new destination is fetched without old destination validators');
   assert.equal(requests.at(-1)!.path, '/new.xml');
   assert.equal(requests.at(-1)!.etag, undefined);
+});
+
+test('private RSS keeps its initial backfill cap on later polls while admitting new items and revisions',async()=>{
+ const saved=config.privateSite;
+ config.privateSite=true;
+ const id=`rss-private-${T}`;
+ try {
+  version=10;
+  await source(id,'/private.xml',false);
+  await sql`UPDATE sources SET config=config || '{"_aihot":{"initialBackfillLimit":8}}'::jsonb WHERE id=${id}`;
+  assert.equal((await collectSource(id)).created,8);
+  assert.equal((await collectSource(id,{force:true})).created,0,'the second poll must not import the other 32 original entries');
+  version=11;additionalEntry=true;
+  const next=await collectSource(id);
+  assert.equal(next.created,1,'new items, including undated ones, are collected');
+  assert.equal(next.revised,1,'updates to previously stored items are retained');
+  const [count]=await sql`SELECT count(*)::int AS total FROM articles WHERE source_id=${id}`;
+  assert.equal(count!.total,9);
+  assert.equal((await collectSource(id,{force:true})).created,0);
+ } finally {config.privateSite=saved;additionalEntry=false;}
 });

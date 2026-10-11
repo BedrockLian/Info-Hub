@@ -1,6 +1,7 @@
 // Collection run for one source: fetch listing → filter → store material → enqueue processing.
 // A failed fetch never advances the success cursor; the source's health reflects consecutive failures.
 import { sql } from "../db.ts";
+import { config } from "../config.ts";
 import { identityKeyFor, upsertMaterial } from "../content/materials.ts";
 import { enqueue, QUEUES } from "../jobs/queue.ts";
 import { queueProcessing } from "../jobs/content.ts";
@@ -105,9 +106,9 @@ export async function collectSource(sourceId: string, opts: { force?: boolean } 
     if (source.kind === "rss") {
       const rss = await fetchRss(source, opts);
       candidates = rss.candidates;
-      // The first import has a smaller backfill cap than later runs: allow the next run to read
-      // the ordinary window before accepting 304s. Persist validators only after store succeeds.
-      if (!firstImport) nextCursor.rss = rss.validator;
+      // Public collection later reads its ordinary window. Private collection records omitted
+      // initial entries below, so it can accept validators without expanding the backfill.
+      if (!firstImport || config.privateSite) nextCursor.rss = rss.validator;
       else delete nextCursor.rss;
       if (rss.notModified) detail = { notModified: true, httpStatus: 304 };
     }
@@ -130,9 +131,19 @@ export async function collectSource(sourceId: string, opts: { force?: boolean } 
     const backfillLimit = Number(source.config._aihot?.initialBackfillLimit ?? 30);
     const backfillMonths = Number(source.config._aihot?.initialBackfillMonths ?? 12);
     if (firstImport) {
+      const initialCandidates = candidates;
       const cutoff = Date.now() - backfillMonths * 30 * 86400000;
       candidates = candidates.filter((c) => !c.publishedAt || c.publishedAt.getTime() >= cutoff).slice(0, backfillLimit);
+      if (config.privateSite && source.kind === "rss") {
+        const key = (c: Candidate) => identityKeyFor({ ...c, sourceId, via: "fetch" });
+        const retained = new Set(candidates.map(key));
+        nextCursor.rssInitialOmitted = [...new Set(initialCandidates.map(key))].filter(k => !retained.has(k));
+      }
     } else if (source.kind !== "x_search") {
+      if (config.privateSite && source.kind === "rss" && Array.isArray(nextCursor.rssInitialOmitted)) {
+        const omitted = new Set<string>(nextCursor.rssInitialOmitted);
+        candidates = candidates.filter(c => !omitted.has(identityKeyFor({ ...c, sourceId, via: "fetch" })));
+      }
       // X keeps every post it read: its watermark already covers them, so a cut here would lose them.
       candidates = candidates.slice(0, MAX_ITEMS_PER_RUN);
     }
