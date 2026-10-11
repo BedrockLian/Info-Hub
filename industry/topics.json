@@ -1,0 +1,77 @@
+{
+  "exportedAt": "2026-10-10",
+  "groups": [
+    {
+      "key": "field",
+      "name": "个人关注",
+      "blurb": "国际时事、外媒对华、科技、游戏与公共事务"
+    }
+  ],
+  "topics": [
+    {
+      "slug": "global_affairs",
+      "name": "国际时事",
+      "group": "field",
+      "tags": [
+        "国际时事"
+      ],
+      "definition": "国际事件、外交、安全和跨国变化",
+      "related": []
+    },
+    {
+      "slug": "china_coverage",
+      "name": "外媒对华",
+      "group": "field",
+      "tags": [
+        "外媒对华"
+      ],
+      "definition": "外国媒体涉及中国、香港、台湾的报道与分析",
+      "related": []
+    },
+    {
+      "slug": "technology",
+      "name": "科技",
+      "group": "field",
+      "tags": [
+        "科技"
+      ],
+      "definition": "科技、互联网、AI、数字权利与产业变化",
+      "related": []
+    },
+    {
+      "slug": "games",
+      "name": "游戏",
+      "group": "field",
+      "tags": [
+        "游戏"
+      ],
+      "definition": "游戏发布、设计、开发、商业和玩家文化",
+      "related": []
+    },
+    {
+      "slug": "public_affairs",
+      "name": "公共事务",
+      "group": "field",
+      "tags": [
+        "公共事务"
+      ],
+      "definition": "公共政策、制度、调查报道、社会研究与治理",
+      "related": []
+    },
+    {
+      "slug": "east-asia",
+      "name": "东亚",
+      "group": "field",
+      "tags": [
+        "东亚",
+        "香港",
+        "台湾"
+      ],
+      "definition": "东亚政治、公共政策与地区关系的补充追踪。",
+      "related": [
+        "china_coverage",
+        "global_affairs"
+      ]
+    }
+  ]
+}

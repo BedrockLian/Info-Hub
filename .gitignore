@@ -1,0 +1,32 @@
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+.cache/
+.DS_Store
+.data/
+
+# Web production build
+apps/web/build/
+apps/web/.react-router/
+
+# Font package unpacked to regenerate the report nameplates (docs/customize.md)
+package/
+fontsource-noto-sans-sc-*.tgz
+
+# Private operational material
+node_modules/
+.env
+.env.*
+!.env.example
+.data/
+.secrets/
+.ssh/
+id_ed25519
+id_rsa
+*.pem
+*.key
+*.passphrase
+*.zip
+.superpowers/

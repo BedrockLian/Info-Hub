@@ -1,0 +1,75 @@
+name: infohub
+
+x-app: &app
+  build: .
+  image: infohub-app:${INFOHUB_RELEASE:-local}
+  env_file: .env
+  restart: unless-stopped
+  environment: &app-env
+    NODE_ENV: production
+    PRIVATE_SITE: 'true'
+    DATABASE_URL: postgres://infohub:${POSTGRES_PASSWORD:?Generate .env first}@db:5432/infohub
+    AIHOT_DATA_DIR: /data
+    API_BASE_URL: http://api:3001
+    LOCAL_ROUTER_URL: http://web:3000
+    FEISHU_CONTENT_PUSH_ENABLED: 'false'
+    FEISHU_INTERNAL_ENABLED: 'false'
+    INDEXNOW_SUBMIT_ENABLED: 'false'
+  volumes:
+    - data:/data
+  depends_on:
+    db:
+      condition: service_healthy
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: infohub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate .env first}
+      POSTGRES_DB: infohub
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U infohub -d infohub']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  setup:
+    <<: *app
+    restart: 'no'
+    command: ['sh', '-c', 'node scripts/migrate.ts && node scripts/seed.ts']
+  api:
+    <<: *app
+    command: ['node', 'apps/api/src/main.ts']
+    environment:
+      <<: *app-env
+      API_HOST: 0.0.0.0
+      API_PORT: '3001'
+      TRUST_PROXY: 'true'
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+  worker:
+    <<: *app
+    command: ['node', 'apps/worker/src/main.ts']
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+  web:
+    <<: *app
+    command: ['node', 'apps/web/server.ts']
+    environment:
+      <<: *app-env
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: '3000'
+      TRUST_PROXY: 'true'
+    ports:
+      - '127.0.0.1:${PORT:-18082}:3000'
+    depends_on:
+      api:
+        condition: service_started
+volumes:
+  db: {}
+  data: {}
