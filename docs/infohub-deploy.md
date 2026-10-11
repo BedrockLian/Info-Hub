@@ -44,8 +44,8 @@ LLM_EXTRA_JSON={"thinking":{"type":"disabled"}}
 LLM_API_KEY=<只在服务器填写>
 COLLECT_ENABLED=true
 MODEL_CALLS_ENABLED=true
-MODEL_BUDGET_DAY_USD=0.50
-MODEL_BUDGET_30D_USD=10
+MODEL_BUDGET_DAY_USD=2.50
+MODEL_BUDGET_30D_USD=75
 ```
 
 该附加参数作为未知场景的兜底。私有站已知 AI 场景由 [分场景思考配置](reasoning.md) 覆盖：预筛、归组和综述低档；评分、理解与归组复核高档；抽取、普通摘要、日报短导语及翻译关闭。无需修改运行密钥或全局附加参数。
@@ -79,3 +79,5 @@ RSS 阅读器须支持自定义 `Authorization: Bearer <令牌>` 请求头。令
 2026-10-11 补充实查：当前服务器已运行 `dde526e1d9c4528b86ad91d0c4234175d9e93730`，迁移0042已完成，当前环境可直接连接 SSH。用户授权的五项 RSS 已通过管理功能写入数据库并首次抓取成功，启用来源由24增至29；本地初始化清单已同步。此操作不需要替换应用镜像，原有信源设置和筛选、预算配置保持不变。详见 [验证记录](infohub-validation.md)。
 
 vhost 备份和更新前数据库转储位于 `/opt/infohub/shared/backups`。恢复 vhost 后用原有 Nginx 检查并 reload。应用可切换到前一 release，设置对应 `INFOHUB_RELEASE` 再 `docker compose -p infohub up -d`。迁移仅增量，应用回退不自动删表；先核对备份再决定数据库恢复。禁止 `docker compose down -v` 用于生产回退。
+
+2026-10-11 已按用户确认发布692526595d12a6033e6548fd201912d6fb93a618，金额调整为USD2.50/24h、USD75/30d，次数仍10/min、100/h、2400/24h，50来源全部启用且健康。已知场景先采用输入简洁约束（infohub-concise-v1），尚不降档；旧费用表仅作关闭思考历史参考。原有操作员抓取频率保留，新增源初次每源8篇。运行参数及备份、验收证据见验证记录。
