@@ -18,7 +18,7 @@ function preflight(failure: 'compose'|'daemon'|'hostname'|'vhost'|'certificate'|
    .replace('nginx=/www/server/nginx/sbin/nginx','nginx="$TEST_ROOT/nginx"')
    .replace('vhost=/www/server/panel/vhost/nginx/news.blian117.dpdns.org.conf','vhost="$TEST_ROOT/vhost"')
    .replace('cert=/www/server/panel/vhost/cert/news.blian117.dpdns.org','cert="$TEST_ROOT/cert"');
-  const stubs=`id() { echo 0; }\nhostname() { echo ${failure==='hostname'?'unexpected-host':'VM-0-4-opencloudos'}; }\ndocker() { if [[ $1 == info ]]; then return ${failure==='daemon'?1:0}; fi; return ${failure==='compose'?1:0}; }\n`;
+  const stubs=`id() { echo 0; }\nhostname() { echo ${failure==='hostname'?'unexpected-host':'VM-0-4-opencloudos'}; }\ncurl() { return 0; }\ndocker() { if [[ $1 == info ]]; then return ${failure==='daemon'?1:0}; fi; return ${failure==='compose'?1:0}; }\n`;
   const result=spawnSync('bash',['-c',stubs+script],{env:{...process.env,TEST_ROOT:root},encoding:'utf8'});
   if(failure!=='vhost')assert.equal(readFileSync(join(root,'vhost'),'utf8'),'original');
   return result;

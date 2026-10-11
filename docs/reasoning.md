@@ -1,0 +1,30 @@
+# 各 AI 场景的思考强度
+
+2026-10-11 核查发现：云端统一使用官方 `deepseek-flash`，没有后台分场景模型覆盖；全局 `LLM_EXTRA_JSON` 关闭了所有思考。此前 24 小时回执包含预筛427次、评分352次、结构222次、摘要77次、综述67次、理解49次、归组5次、复核1次，未记录到 reasoning token 明细。这是调整前快照，不能证明开启思考后的质量。
+
+配置集中在 `industry/reasoning.ts`。只对私有站、官方 DeepSeek Flash、已知调用目的生效；这些场景的设置覆盖全局 thinking/effort。其他部署、模型和未知目的保留原附加参数。金额、次数及谷价安全阀继续执行，不追溯重评已有文章。
+
+| 场景 | 调用目的 | 强度 | 原因 |
+|---|---|---|---|
+| 主题与立场预筛 | prefilter_article | low | 需要辨别事实与立场，且每篇必经，控制成本 |
+| 两次独立精选评分 | score_article | high | 需要综合五维标准及阅读价值 |
+| 入选及接近入选内容理解 | understand_article | high | 形成准确标题、摘要、推荐理由和标签 |
+| 字段结构抽取 | structure_article | 关闭 | 按已有文本抽取字段 |
+| 普通中文标题摘要 | summarize_article | 关闭 | 简单压缩和转述 |
+| 文章、信号、事件归组 | group_article / group_signal / group_story | low | 比较主体、动作、时间，判断关系 |
+| 文章及事件合并复核 | group_review / group_story_review | high | 合并会影响多篇内容，复核值得更多思考 |
+| 事件综述 | story_digest | low | 整理多来源信息及进展 |
+| 日报标题、导语与亮点 | report_lead | 关闭 | 正文由现有条目组装，模型只写短导语和选亮点 |
+| 周报、月报综合分析 | report_weekly / report_monthly | high | 跨多条消息归纳主题；模块继续关闭 |
+| 全文及引用翻译 | translate_body / translate_quoted | 关闭 | 忠实翻译；模块继续关闭 |
+| Codex 公告识别 | monitor.recognize | low | 判断公告语义；模块继续关闭 |
+
+没有实际 `report_daily` 模型请求；日报只调用 `report_lead`。`monitor.context` 是获取上下文的外部数据请求，不是模型调用。关闭中的模块不因本配置开启。
+
+依据 [DeepSeek 官方思考模式文档](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/)（2026-10-11 核查），使用实际支持的 low/high，避免把 medium 误认为单独中档；不使用 max。思考开启时不发送无效的 temperature。低档的总输出额度至少4096 token，高档至少8192；内容理解保留原16384。额度同时容纳思考与答案，不是强制用量，仍可能截断或超时。长度截断一律记录为不可用，保留费用记录，后续重试仍受预算约束。
+
+回执 request 记录实际 `thinking`、`reasoningEffort`、`reasoningPolicy` 和 `maxTokens`；请求身份包含生效参数，因此新参数不会复用旧的关闭思考结果，同参数恢复继续复用。费用预留根据提高后的总输出额度计算，实际结算使用含思考的 completion_tokens。接近预算时可能更早暂停，没有自动扩容或降低强度的回退。
+
+验证使用隔离空测试库与本地 HTTP 替身，不调用收费服务。覆盖17个实际调用目的的参数、额度、回执、复用身份、预算阻断与截断处理。真实筛选质量、耗时和费用需上线后用自然任务回执及用户标注样本校准，不能以模拟响应宣称准确率提高。
+
+2026-10-11 验证结果：本地类型检查与 Web 构建通过；内部 Docker 网络中的空 `infohub_reasoning_test` 库迁移后，Web13项、后端完整165项、私有站认证烟测通过，无跳过。初跑发现预检测试依赖宿主 curl，已在测试夹具补齐 curl 替身后重跑全套通过；生产部署脚本未改。测试网络没有外部出口、没有生产环境文件和密钥，临时容器及数据库已清理。本轮尚未发布云端，也没有进行付费模型准确率或耗时实验。

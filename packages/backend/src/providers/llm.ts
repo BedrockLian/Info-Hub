@@ -8,6 +8,7 @@ import { config, credential } from "../config.ts";
 import { sha256 } from "../lib/ids.ts";
 import { completeReceipt, paidRequest, BudgetExceededError, ProviderRejectedError, rejectReceivedResponse } from "./receipts.ts";
 import { sql } from "../db.ts";
+import { REASONING_BY_PURPOSE, REASONING_OUTPUT_FLOOR, REASONING_POLICY_VERSION } from '@aihot/industry/reasoning';
 
 export interface ModelSpec {
   key: string;
@@ -54,7 +55,7 @@ export const MODELS: Record<string, ModelSpec> = {
     baseUrlEnv: "ZHIPU_BASE_URL", apiKeyEnv: "ZHIPU_API_KEY",
     extra: { thinking: { type: "enabled", clear_thinking: false }, reasoning_effort: "high", top_p: 0.95 }, jsonMode: true,
   },
-  // DeepSeek Flash reasons by default; structured tasks switch it off unless the -think variant is used.
+  // Upstream preset defaults; known private Info-Hub scenes override thinking below.
   "deepseek-flash": {
     key: "deepseek-flash", service: "deepseek", model: "deepseek-flash",
     baseUrlEnv: "DEEPSEEK_BASE_URL", apiKeyEnv: "DEEPSEEK_API_KEY", vision: false,
@@ -164,9 +165,9 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   if (!baseUrl || !apiKey || !spec.model) throw new Error(`Model ${opts.model} is not configured (${spec.baseUrlEnv}, ${spec.apiKeyEnv}${spec.key === "default" ? ", LLM_MODEL" : ""})`);
 
   const temperature = opts.temperature ?? 0.2;
-  const maxTokens = Math.max(opts.maxTokens ?? 1500, 512) + (spec.key.endsWith("-think") ? 4000 : 0);
+  let maxTokens = Math.max(opts.maxTokens ?? 1500, 512) + (spec.key.endsWith("-think") ? 4000 : 0);
   const userText = typeof opts.user === "string" ? opts.user : JSON.stringify(opts.user);
-  const extra = spec.extra ?? {};
+  const extra = { ...spec.extra };
   // The receipt and cost reservation must describe the actual model, input and output ceiling.
   for (const key of ['model', 'messages', 'max_tokens', 'max_completion_tokens', 'stream', 'n']) {
     if (Object.hasOwn(extra,key)) throw new Error(`LLM_EXTRA_JSON cannot override ${key}`);
@@ -175,6 +176,17 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
     const allowed=new Set(['thinking','reasoning_effort','top_p','seed','frequency_penalty','presence_penalty']);
     for (const key of Object.keys(extra)) if (!allowed.has(key)) throw new Error(`Private Info-Hub does not allow extra parameter ${key}`);
   }
+  // Override the shared fallback only for known private-site scenes on the supported provider.
+  const effort = config.privateSite && spec.model === 'deepseek-flash' && new URL(baseUrl).hostname === 'api.deepseek.com'
+    && Object.hasOwn(REASONING_BY_PURPOSE, opts.purpose)
+    ? REASONING_BY_PURPOSE[opts.purpose] : undefined;
+  if (effort !== undefined) {
+    extra.thinking = { type: effort === 'none' ? 'disabled' : 'enabled' };
+    extra.reasoning_effort = effort;
+    maxTokens = Math.max(maxTokens, REASONING_OUTPUT_FLOOR[effort]);
+  }
+  const thinking = (extra.thinking as { type?: unknown } | undefined)?.type;
+  const thinkingEnabled = effort !== undefined && effort !== 'none';
   const body: Record<string, unknown> = {
     ...extra,
     model: spec.model,
@@ -184,7 +196,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
       // Multimodal parts go through as parts; plain objects are sent as JSON text.
       { role: "user", content: typeof opts.user === "string" || Array.isArray(opts.user) ? opts.user : userText },
     ],
-    temperature,
+    ...(thinkingEnabled ? {} : { temperature }),
     max_tokens: maxTokens,
     ...(spec.jsonMode && opts.json !== false ? { response_format: { type: "json_object" } } : {}),
   };
@@ -201,8 +213,11 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
       model: spec.model,
       purpose: opts.purpose,
       subject: opts.subject,
-      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(opts.system), user: sha256(userText), temperature, maxTokens, extra },
-      requestSummary: { promptVersion: opts.promptVersion, systemHash: sha256(opts.system), userHash: sha256(userText), userChars: userText.length, temperature, maxTokens },
+      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(opts.system), user: sha256(userText), ...(thinkingEnabled ? {} : {temperature}), maxTokens, extra },
+      requestSummary: { promptVersion: opts.promptVersion, systemHash: sha256(opts.system), userHash: sha256(userText), userChars: userText.length, ...(thinkingEnabled ? {} : {temperature}), maxTokens,
+        thinking: typeof thinking === 'string' ? thinking : null,
+        reasoningEffort: typeof extra.reasoning_effort === 'string' ? extra.reasoning_effort : null,
+        reasoningPolicy: effort !== undefined ? REASONING_POLICY_VERSION : null },
       attemptTag: opts.attemptTag,
     },
     async () => {
@@ -244,6 +259,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   const content = response.choices?.[0]?.message?.content ?? "";
   let parsed: z.infer<S>;
   try {
+    if (response.choices?.[0]?.finish_reason === 'length') throw new ModelOutputError('Output truncated (finish_reason=length)');
     parsed = opts.schema.parse(opts.parse ? opts.parse(content) : extractJson(content));
   } catch (error) {
     // Unusable output: record it and let a later attempt pay for a fresh answer.
