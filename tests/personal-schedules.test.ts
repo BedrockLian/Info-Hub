@@ -6,9 +6,10 @@ import {catchUpReports} from '@aihot/backend/reports/compose';
 import {sql} from '@aihot/backend/db';
 import {stopBoss} from '@aihot/backend/jobs/queue';
 after(async()=>{await stopBoss();await sql.end();});
-test('removed modules never schedule paid work, daily reporting remains',()=>{
+test('disabled modules stay unscheduled; translation and daily reporting remain enabled',()=>{
  const names=SCHEDULES.map(s=>s.name);
- for(const removed of ['content.translate','reports.weekly','reports.monthly','leaderboard.round','monitor.tick','monitor.lookback'])assert.ok(!names.includes(removed),removed);
+ for(const removed of ['reports.weekly','reports.monthly','leaderboard.round','monitor.tick','monitor.lookback'])assert.ok(!names.includes(removed),removed);
+ assert.ok(names.includes('content.translate'));
  assert.ok(names.includes('reports.daily'));
 });
 test('catch-up also respects disabled period reports',async()=>{

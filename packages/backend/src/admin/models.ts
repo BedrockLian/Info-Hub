@@ -11,6 +11,9 @@ interface UsageRow {
   purpose: string;
   model: string | null;
   prompt_version: string | null;
+  runtime:string;
+  effort:string|null;
+  template_hash:string|null;
   calls: number;
   ok: number;
   failed: number;
@@ -19,26 +22,38 @@ interface UsageRow {
   p95: number | null;
   tokens_in: string | null;
   tokens_out: string | null;
+  cached_tokens: string | null;
+  cache_input: string | null;
   actual_cost: string | null;
+  estimated_cost:string|null;
   currency: string | null;
 }
 
 export async function modelsOverview(days = 7) {
   const since = new Date(Date.now() - days * 86400_000);
-  const [sources, usage, prices, history, benches] = await Promise.all([
+  const [sources, usage, prices, history, benches,cacheEvents] = await Promise.all([
     modelSources(),
     sql<UsageRow[]>`
-      SELECT r.purpose, a.model, r.request->>'promptVersion' AS prompt_version, count(*)::int AS calls,
+      SELECT r.purpose, a.model, r.request->>'promptVersion' AS prompt_version,
+             coalesce(r.request->>'runtime','direct') AS runtime,r.request->>'reasoningEffort' AS effort,r.request->>'templateHash' AS template_hash,
+             count(*)::int AS calls,
              count(*) FILTER (WHERE a.status = 'received')::int AS ok,
              count(*) FILTER (WHERE a.status = 'failed')::int AS failed,
              count(*) FILTER (WHERE a.status = 'unknown')::int AS unknown,
              percentile_disc(0.5) WITHIN GROUP (ORDER BY a.latency_ms) AS p50,
              percentile_disc(0.95) WITHIN GROUP (ORDER BY a.latency_ms) AS p95,
              sum((a.usage->>'prompt_tokens')::bigint) AS tokens_in, sum((a.usage->>'completion_tokens')::bigint) AS tokens_out,
-             sum(a.cost) FILTER (WHERE a.cost_basis = 'actual') AS actual_cost, max(a.currency) AS currency
+             sum(c.hit) AS cached_tokens,
+             sum(CASE WHEN c.hit IS NOT NULL THEN (a.usage->>'prompt_tokens')::numeric END) AS cache_input,
+             sum(a.cost) FILTER (WHERE a.cost_basis = 'actual') AS actual_cost,
+             sum(a.cost) FILTER (WHERE a.cost_basis = 'estimated') AS estimated_cost, max(a.currency) AS currency
       FROM receipt_attempts a JOIN receipts r ON r.id = a.receipt_id
+      CROSS JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(a.usage->'prompt_cache_hit_tokens')='number'
+        AND (a.usage->>'prompt_cache_hit_tokens')::numeric BETWEEN 0 AND (a.usage->>'prompt_tokens')::numeric
+        AND (NOT a.usage ? 'prompt_cache_miss_tokens' OR (a.usage->>'prompt_cache_hit_tokens')::numeric+(a.usage->>'prompt_cache_miss_tokens')::numeric=(a.usage->>'prompt_tokens')::numeric)
+        THEN (a.usage->>'prompt_cache_hit_tokens')::numeric END AS hit) c
       WHERE a.started_at >= ${since} AND a.origin = 'live' AND a.model IS NOT NULL
-      GROUP BY 1, 2, 3 ORDER BY 1, 4 DESC`,
+      GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1, 7 DESC`,
     sql<{ service: string; model: string; currency: string; input_per_mtok: string | null; output_per_mtok: string | null }[]>`
       SELECT service, model, currency, input_per_mtok, output_per_mtok FROM service_prices`,
     sql<{ at: Date; actor: string; subject: string; reason: string | null; before: unknown; after: unknown }[]>`
@@ -47,6 +62,7 @@ export async function modelsOverview(days = 7) {
       SELECT id, label, sample_size, prompt_version, models,
              (SELECT coalesce(jsonb_object_agg(key, value - 'sweep'), '{}'::jsonb) FROM jsonb_each(r.summary)) AS summary,
              created_at FROM selectbench_runs r ORDER BY created_at DESC LIMIT 8`,
+    sql<{purpose:string;lookups:number;hits:number;templates:string[]}[]>`SELECT purpose,count(*)::int AS lookups,count(*) FILTER(WHERE reused)::int AS hits,array_agg(DISTINCT template_hash) AS templates FROM model_result_cache_events WHERE created_at>=${since} GROUP BY purpose`,
   ]);
   const serviceOf = (model: string) => Object.values(MODELS).find((m) => m.model === model || m.key === model)?.service ?? null;
   const priced = (u: UsageRow) => {
@@ -55,6 +71,10 @@ export async function modelsOverview(days = 7) {
     if (!p || (!p.input_per_mtok && !p.output_per_mtok)) return null;
     return { amount: (Number(u.tokens_in ?? 0) / 1e6) * Number(p.input_per_mtok ?? 0) + (Number(u.tokens_out ?? 0) / 1e6) * Number(p.output_per_mtok ?? 0), currency: p.currency };
   };
+  const cacheFor=(purposes:string[])=>{
+    const rows=cacheEvents.filter(e=>purposes.includes(e.purpose));
+    return {lookups:rows.reduce((n,e)=>n+e.lookups,0),hits:rows.reduce((n,e)=>n+e.hits,0),templates:new Set(rows.flatMap(e=>e.templates)).size};
+  };
   const capabilities = (Object.entries(CAPABILITIES) as Array<[CapabilityKey, Capability]>).map(([key, c]) => ({
     key,
     label: c.label,
@@ -62,12 +82,14 @@ export async function modelsOverview(days = 7) {
     defaultModel: c.default,
     vision: !!c.vision,
     current: sources[key]!,
+    resultCache:cacheFor(c.purposes),
     usage: usage
       .filter((u) => c.purposes.includes(u.purpose))
       .map((u) => ({
         purpose: u.purpose,
         model: u.model,
         promptVersion: u.prompt_version,
+        runtime:u.runtime,effort:u.effort,templateHash:u.template_hash,
         calls: u.calls,
         ok: u.ok,
         failed: u.failed,
@@ -76,9 +98,11 @@ export async function modelsOverview(days = 7) {
         p95: u.p95,
         tokensIn: Number(u.tokens_in ?? 0),
         tokensOut: Number(u.tokens_out ?? 0),
+        cachedInput:u.cached_tokens===null?null:Number(u.cached_tokens),
+        cacheHitRate:u.cache_input===null||Number(u.cache_input)===0?null:Number(u.cached_tokens??0)/Number(u.cache_input),
         actualCost: u.actual_cost === null ? null : Number(u.actual_cost),
         currency: u.currency,
-        estimate: priced(u),
+        estimate: u.estimated_cost===null?priced(u):{amount:Number(u.estimated_cost),currency:u.currency??'USD'},
       })),
   }));
   const choices = Object.values(MODELS).map((m) => ({ key: m.key, service: m.service, vision: !!m.vision }));

@@ -8,6 +8,9 @@ import { config, credential } from "../config.ts";
 import { sha256 } from "../lib/ids.ts";
 import { completeReceipt, paidRequest, BudgetExceededError, ProviderRejectedError, rejectReceivedResponse } from "./receipts.ts";
 import { sql } from "../db.ts";
+import {piAgentRequest,PI_RUNTIME_VERSION} from './pi-agent.ts';
+import {piBatches} from './pi-batch.ts';
+import {stablePrompt} from './prompt-layout.ts';
 import { REASONING_BY_PURPOSE, REASONING_OUTPUT_FLOOR, REASONING_POLICY_VERSION, inferenceGuidance, INFERENCE_GUIDANCE_VERSION } from '@aihot/industry/reasoning';
 
 export interface ModelSpec {
@@ -99,6 +102,7 @@ export interface ChatJsonOptions<S extends z.ZodType> {
   schema: S;
   temperature?: number;
   maxTokens?: number;
+  targetLanguage?: string;
   attemptTag?: string;
   timeoutMs?: number;
   /** false: the model answers in its own text format (no JSON mode); `parse` turns it into the schema's input. */
@@ -166,7 +170,8 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
 
   const temperature = opts.temperature ?? 0.2;
   let maxTokens = Math.max(opts.maxTokens ?? 1500, 512) + (spec.key.endsWith("-think") ? 4000 : 0);
-  const userText = typeof opts.user === "string" ? opts.user : JSON.stringify(opts.user);
+  const usePi=config.privateSite&&config.modelRuntime==='pi-agent-core';
+  const targetLanguage=opts.targetLanguage??'zh';
   const extra = { ...spec.extra };
   // The receipt and cost reservation must describe the actual model, input and output ceiling.
   for (const key of ['model', 'messages', 'max_tokens', 'max_completion_tokens', 'stream', 'n']) {
@@ -188,7 +193,10 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   const thinking = (extra.thinking as { type?: unknown } | undefined)?.type;
   const thinkingEnabled = effort !== undefined && effort !== 'none';
   const guidance = effort !== undefined ? inferenceGuidance(opts.purpose) : null;
-  const system = [opts.system,guidance?.instruction].filter(Boolean).join('\n\n');
+  const layout=usePi&&typeof opts.user==='string'?stablePrompt(opts.system,opts.user,opts.purpose,opts.schema,spec.jsonMode&&opts.json!==false):{system:opts.system,user:opts.user};
+  const system = [layout.system,guidance?.instruction,usePi?`【目标语言】面向读者的文本使用 ${targetLanguage}；固定字段名、专有名词及原文证据按原任务规则保留。`:null].filter(Boolean).join('\n\n');
+  const userText=typeof layout.user==='string'?layout.user:JSON.stringify(layout.user);
+  const templateHash=sha256(system);
   const body: Record<string, unknown> = {
     ...extra,
     model: spec.model,
@@ -196,7 +204,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
       // Preserve one-message prompts unless the private-site guidance supplies a system instruction.
       ...(system ? [{ role: "system", content: system }] : []),
       // Multimodal parts go through as parts; plain objects are sent as JSON text.
-      { role: "user", content: typeof opts.user === "string" || Array.isArray(opts.user) ? opts.user : userText },
+      { role: "user", content: typeof layout.user==='string'||Array.isArray(layout.user)?layout.user:userText },
     ],
     ...(thinkingEnabled ? {} : { temperature }),
     max_tokens: maxTokens,
@@ -207,7 +215,8 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   if (budgeted && (spec.model !== "deepseek-flash" || new URL(baseUrl).hostname !== "api.deepseek.com" || Array.isArray(opts.user))) throw new Error("Private Info-Hub requires the configured text-only DeepSeek Flash pricing for cost control");
   const maxCostUsd = budgeted ? reserveFlashUsd(JSON.stringify(body), maxTokens) : undefined;
 
-  const receipt = await paidRequest(
+  const schedule=usePi?<T>(run:()=>Promise<T>)=>piBatches.submit(`${spec.model}:${opts.purpose}:${templateHash}:${effort??'none'}`,run):<T>(run:()=>Promise<T>)=>run();
+  const receipt = await schedule(()=>paidRequest(
     {
       maxCostUsd,
       assertAvailable: budgeted ? () => { const window=modelWindow(new Date(),opts.timeoutMs ?? 120000); if(!window.allowed)throw new BudgetExceededError(spec.service,"off-peak schedule",window.retryAfterSeconds); } : undefined,
@@ -215,49 +224,54 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
       model: spec.model,
       purpose: opts.purpose,
       subject: opts.subject,
-      identity: { model: spec.model, promptVersion: opts.promptVersion, system: sha256(system), user: sha256(userText), ...(thinkingEnabled ? {} : {temperature}), maxTokens, extra },
+      identity: { model: spec.model, promptVersion: opts.promptVersion, system: templateHash, user: sha256(userText), ...(usePi?{targetLanguage}:{}), ...(thinkingEnabled ? {} : {temperature}), maxTokens, extra },
       requestSummary: { promptVersion: opts.promptVersion, systemHash: sha256(system), userHash: sha256(userText), userChars: userText.length, ...(thinkingEnabled ? {} : {temperature}), maxTokens,
         instructionPolicy: guidance ? INFERENCE_GUIDANCE_VERSION : null,
         softThinkingTokens: guidance?.softThinkingTokens ?? null,
+        runtime: usePi?'pi-agent-core':'direct',runtimeVersion:usePi?PI_RUNTIME_VERSION:null,
+        templateHash,targetLanguage,
         thinking: typeof thinking === 'string' ? thinking : null,
         reasoningEffort: typeof extra.reasoning_effort === 'string' ? extra.reasoning_effort : null,
         reasoningPolicy: effort !== undefined ? REASONING_POLICY_VERSION : null },
       attemptTag: opts.attemptTag,
     },
     async () => {
-      const started = Date.now();
-      let res: Response;
-      try {
-        res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(opts.timeoutMs ?? 120_000),
-        });
-      } catch (error) {
-        if (isConnectFailure(error)) throw new ProviderRejectedError(`connect failed: ${String(error)}`, null, true);
-        throw error;
-      }
-      const text = await res.text();
-      if (!res.ok) {
-        const retryable = res.status === 429 || res.status >= 500;
-        throw new ProviderRejectedError(`HTTP ${res.status}: ${text.slice(0, 500)}`, res.status, retryable);
-      }
-      let json: Record<string, unknown>;
-      try {
-        json = JSON.parse(text);
-      } catch {
-        json = { unparsable: text.slice(0, 20000) };
-      }
-      const usage = (json.usage as Record<string, unknown> | undefined) ?? null;
-      return {
-        response: { ...json, _latencyMs: Date.now() - started },
-        requestId: (json.id as string | undefined) ?? res.headers.get("x-request-id"),
-        usage,
-        cost: budgeted ? {amount:estimateFlashUsd(usage) ?? maxCostUsd!, currency:"USD",basis:"estimated"} : null,
+      const send=async(actualBody:Record<string,unknown>,agentSignal?:AbortSignal)=>{
+        const started = Date.now();
+        let res: Response;
+        try {
+          res = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+            method: "POST",
+            headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify(actualBody),
+            signal: agentSignal?AbortSignal.any([agentSignal,AbortSignal.timeout(opts.timeoutMs??120000)]):AbortSignal.timeout(opts.timeoutMs ?? 120_000),
+          });
+        } catch (error) {
+          if (isConnectFailure(error)) throw new ProviderRejectedError(`connect failed: ${String(error)}`, null, true);
+          throw error;
+        }
+        const text = await res.text();
+        if (!res.ok) {
+          const retryable = res.status === 429 || res.status >= 500;
+          throw new ProviderRejectedError(`HTTP ${res.status}: ${text.slice(0, 500)}`, res.status, retryable);
+        }
+        let json: Record<string, unknown>;
+        try {
+          json = JSON.parse(text);
+        } catch {
+          json = { unparsable: text.slice(0, 20000) };
+        }
+        const usage = (json.usage as Record<string, unknown> | undefined) ?? null;
+        return {
+          response: { ...json, _latencyMs: Date.now() - started },
+          requestId: (json.id as string | undefined) ?? res.headers.get("x-request-id"),
+          usage,
+          cost: budgeted ? {amount:estimateFlashUsd(usage) ?? maxCostUsd!, currency:"USD",basis:"estimated" as const} : null,
+        };
       };
+      return usePi?piAgentRequest({body,baseUrl,apiKey,effort:effort??'none',send}):send(body);
     },
-  );
+  ));
 
   const response = receipt.response as { choices?: Array<{ message?: { content?: string }; finish_reason?: string }>; usage?: Record<string, unknown> };
   const content = response.choices?.[0]?.message?.content ?? "";
@@ -270,6 +284,8 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
     await rejectReceivedResponse(receipt.receiptId, `unusable output: ${String(error).slice(0, 500)}`);
     throw new ModelOutputError(`Model ${opts.model} returned unusable output for ${opts.subject}: ${String(error).slice(0, 300)}`);
   }
+  if(usePi)await sql`INSERT INTO model_result_cache_events (receipt_id,purpose,subject,template_hash,content_hash,target_language,reused)
+    VALUES (${receipt.receiptId},${opts.purpose},${opts.subject},${templateHash},${sha256(userText)},${targetLanguage},${receipt.reused})`;
   return { data: parsed, receiptId: receipt.receiptId, reused: receipt.reused, model: spec.key, usage: response.usage ?? null };
 }
 

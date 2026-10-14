@@ -43,6 +43,7 @@ export const config = {
   privateSite: bool("PRIVATE_SITE", true),
   modelBudgetDayUsd: amount("MODEL_BUDGET_DAY_USD", 0.50),
   modelBudgetMonthUsd: amount("MODEL_BUDGET_30D_USD", 10),
+  modelRuntime: str("MODEL_RUNTIME", "pi-agent-core"),
   databaseUrl: str("DATABASE_URL", "postgres://127.0.0.1:5432/aihot"),
   apiPort: int("API_PORT", 3001),
   webPort: int("WEB_PORT", 3000),

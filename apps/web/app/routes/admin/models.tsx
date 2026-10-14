@@ -11,6 +11,9 @@ interface Usage {
   purpose: string;
   model: string | null;
   promptVersion: string | null;
+  runtime:string;
+  effort:string|null;
+  templateHash:string|null;
   calls: number;
   ok: number;
   failed: number;
@@ -19,6 +22,8 @@ interface Usage {
   p95: number | null;
   tokensIn: number;
   tokensOut: number;
+  cachedInput:number|null;
+  cacheHitRate:number|null;
   actualCost: number | null;
   currency: string | null;
   estimate: { amount: number; currency: string } | null;
@@ -26,7 +31,7 @@ interface Usage {
 
 interface Models {
   days: number;
-  capabilities: Array<{ key: string; label: string; env: string; defaultModel: string; vision: boolean; current: { model: string; source: "admin" | "env" | "default" }; usage: Usage[] }>;
+  capabilities: Array<{ key: string; label: string; env: string; defaultModel: string; vision: boolean; current: { model: string; source: "admin" | "env" | "default" }; usage: Usage[];resultCache:{lookups:number;hits:number;templates:number} }>;
   choices: Array<{ key: string; service: string; vision: boolean }>;
   history: Array<{ at: string; actor: string; subject: string; reason: string | null; before: { model: string; source: string } | null; after: { model: string; source: string } | null }>;
   benches: Array<{ id: string; label: string; sample_size: number; prompt_version: string | null; models: string[]; created_at: string }>;
@@ -80,13 +85,17 @@ export default function ModelsAdmin({ loaderData: m }: Route.ComponentProps) {
               }
               pad={false}
             >
+              <div className="border-b border-line px-4 py-3 text-xs text-ink-3" title="结果复用统计已通过格式校验的任务；复用直接读取已完成回执，不调用模型。输入缓存比例按服务商返回的token明细计算。">
+                结果复用 {num(c.resultCache.hits)} / {num(c.resultCache.lookups)} 次 · 固定模板 {num(c.resultCache.templates)} 个
+              </div>
               {c.usage.length ? (
                 <DataTable
                   dense
                   rows={c.usage}
-                  rowKey={(u) => `${u.purpose}|${u.model}|${u.promptVersion}`}
+                  rowKey={(u) => `${u.purpose}|${u.model}|${u.promptVersion}|${u.runtime}|${u.effort}|${u.templateHash}`}
                   columns={[
                     { key: "m", label: "模型", render: (u) => <span className="whitespace-nowrap font-mono text-[12px]">{u.model}</span> },
+                    { key:"runtime",label:"执行 / 思考",render:(u)=><span className="whitespace-nowrap" title={u.templateHash?`固定模板 ${u.templateHash}`:undefined}>{u.runtime==='pi-agent-core'?'Pi':'直连'} · {u.effort==='none'?'关闭':u.effort==='low'?'低':u.effort==='high'?'高':'默认'}</span> },
                     { key: "v", label: "提示版本", render: (u) => <span className="whitespace-nowrap font-mono text-[11.5px] text-ink-3">{u.promptVersion ?? "—"}</span> },
                     { key: "p", label: "用途", render: (u) => <span className="whitespace-nowrap font-mono text-[11.5px] text-ink-3">{u.purpose}</span> },
                     { key: "c", label: "调用", align: "right", render: (u) => num(u.calls) },
@@ -101,6 +110,7 @@ export default function ModelsAdmin({ loaderData: m }: Route.ComponentProps) {
                     },
                     { key: "l", label: "耗时 p50 / p95", align: "right", render: (u) => <span className="whitespace-nowrap">{`${secs(u.p50)} / ${secs(u.p95)}`}</span> },
                     { key: "t", label: "输入 / 输出 token", align: "right", render: (u) => <span className="whitespace-nowrap">{`${num(u.tokensIn)} / ${num(u.tokensOut)}`}</span> },
+                    { key:"cache",label:"输入缓存命中",align:"right",render:(u)=><span className="whitespace-nowrap">{u.cacheHitRate===null?'未返回明细':`${(u.cacheHitRate*100).toFixed(1)}% · ${num(u.cachedInput??0)} token`}</span> },
                     {
                       key: "$",
                       label: "费用",

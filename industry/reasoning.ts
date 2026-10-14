@@ -1,22 +1,22 @@
 // Private Info-Hub's official DeepSeek Flash calls only. Other deployments retain their model extras.
 // Output ceilings include thinking and the final answer; these are headroom, not a target token spend.
-export const REASONING_POLICY_VERSION = 'infohub-scenes-v1';
+export const REASONING_POLICY_VERSION = 'infohub-pi-low-v2';
 export type ReasoningEffort = 'none' | 'low' | 'high';
 export const REASONING_BY_PURPOSE: Readonly<Record<string, ReasoningEffort>> = {
   prefilter_article: 'low',
-  score_article: 'high',
-  understand_article: 'high',
+  score_article: 'low',
+  understand_article: 'low',
   structure_article: 'none',
   summarize_article: 'none',
   group_article: 'low',
   group_signal: 'low',
   group_story: 'low',
-  group_review: 'high',
-  group_story_review: 'high',
+  group_review: 'low',
+  group_story_review: 'low',
   story_digest: 'low',
   report_lead: 'none',
-  report_weekly: 'high',
-  report_monthly: 'high',
+  report_weekly: 'low',
+  report_monthly: 'low',
   translate_body: 'none',
   translate_quoted: 'none',
   'monitor.recognize': 'low',
@@ -24,7 +24,7 @@ export const REASONING_BY_PURPOSE: Readonly<Record<string, ReasoningEffort>> = {
 export const REASONING_OUTPUT_FLOOR = { none: 512, low: 4096, high: 8192 } as const;
 
 // Prompt targets are deliberately separate from provider effort and the hard total-output ceiling.
-// Adjust these targets first; lower REASONING_BY_PURPOSE only after observing real usage and quality.
+// Keep prompt targets alongside the user's explicit low/none effort policy.
 export const INFERENCE_GUIDANCE_VERSION = 'infohub-concise-v1';
 const GUIDANCE: Readonly<Record<string, { softThinkingTokens: number|null; output: string }>> = {
   prefilter_article: { softThinkingTokens:400, output:'主题理由与个人判断依据各用一句短句；只保留必要的原文证据，不重复概括全文。' },

@@ -6,7 +6,8 @@ export const FEATURES = {
   leaderboard: false,
   /** Codex 重置监控：盯 OpenAI Codex 负责人在 X 上的额度重置公告（/codex-reset）。需要 SocialData。 */
   codexResetMonitor: false,
-  fulltextTranslation: false,
+  // Only selected items already permitted by publication rules to show full text are eligible.
+  fulltextTranslation: true,
   weeklyReports: false,
   monthlyReports: false,
 } as const;

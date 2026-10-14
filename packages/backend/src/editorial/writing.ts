@@ -283,7 +283,6 @@ function anchorDate(d: Date | undefined): string {
 export function buildArticlePrompt(input: TranslateInput): string {
   return promptText("summarize-article", {
     publishedDate: anchorDate(input.publishedAt),
-    today: anchorDate(new Date()),
     sourceName: sourceName(input.sourceName),
     identity: identityPrompt(input),
     title: input.title,
