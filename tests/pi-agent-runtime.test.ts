@@ -4,6 +4,8 @@ import {piAgentRequest} from '../packages/backend/src/providers/pi-agent.ts';
 import {TemplateBatcher} from '../packages/backend/src/providers/pi-batch.ts';
 import {stablePrompt} from '../packages/backend/src/providers/prompt-layout.ts';
 import {z} from 'zod';
+import {createPiModelRuntime} from '../packages/backend/src/providers/pi-ai.ts';
+import {createAssistantMessageEventStream,type AssistantMessage} from '@earendil-works/pi-ai';
 
 const body=(text:string)=>({model:'deepseek-flash',max_tokens:4096,messages:[{role:'system',content:'Stable rules'},{role:'user',content:text}]});
 test('real Pi agents preserve native requests and usage without carrying another article into the transcript',async()=>{
@@ -37,4 +39,25 @@ test('dynamic summary dates and IDs are separated from the reusable instruction/
   const a=stablePrompt('','Rules\r\n\r\n【时间锚点】A date\narticle A','summarize_article',schema,true);
   const b=stablePrompt('','Rules\n\n【时间锚点】B date\narticle B','summarize_article',schema,true);
   assert.equal(a.system,b.system);assert.notEqual(a.user,b.user);assert.match(a.system,/固定结果结构/);assert.ok(!a.system.includes('A date'));
+});
+
+test('Pi AI registers the configured DeepSeek model and resolves its existing key at dispatch',async()=>{
+  let resolvedKey:unknown;
+  const stream=()=>{const events=createAssistantMessageEventStream();events.push({type:'done',reason:'stop',message:{role:'assistant',content:[{type:'text',text:'ok'}],api:'openai-completions',provider:'deepseek',model:'deepseek-flash',stopReason:'stop',timestamp:0,usage:{input:0,output:0,cacheRead:0,cacheWrite:0,totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}} as AssistantMessage});return events;};
+  const runtime=createPiModelRuntime({modelId:'deepseek-flash',baseUrl:'https://api.deepseek.com/v1',apiKey:'test-existing-key',maxTokens:4096,streams:{stream:(_m,_c,o)=>{resolvedKey=o?.apiKey;return stream();},streamSimple:(_m,_c,o)=>{resolvedKey=o?.apiKey;return stream();}}});
+  assert.equal(runtime.models.getModel('deepseek','deepseek-flash'),runtime.model);
+  assert.equal(runtime.model.baseUrl,'https://api.deepseek.com/v1');
+  assert.equal(runtime.model.compat?.supportsDeveloperRole,false);
+  const result=await runtime.models.completeSimple(runtime.model,{systemPrompt:'fixed',messages:[{role:'user',content:'article',timestamp:0}]},{reasoning:'low'});
+  assert.equal(result.stopReason,'stop');assert.equal(resolvedKey,'test-existing-key');
+});
+
+test('all editorial scenes share a fixed prefix before scene rules and changing article material',()=>{
+  const schema=z.object({ok:z.boolean()});
+  const a=stablePrompt('Score rules','article A','score_article',schema,true);
+  const b=stablePrompt('Timeline rules','article B','story_digest',schema,true);
+  const shared=a.system.slice(0,a.system.indexOf('Score rules'));
+  assert.match(shared,/编辑规则版本：infohub-pi-editor-v1/);
+  assert.ok(b.system.startsWith(shared));
+  assert.ok(!shared.includes('article A'));assert.equal(a.user,'article A');assert.equal(b.user,'article B');
 });

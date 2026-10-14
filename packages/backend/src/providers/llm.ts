@@ -10,7 +10,7 @@ import { completeReceipt, paidRequest, BudgetExceededError, ProviderRejectedErro
 import { sql } from "../db.ts";
 import {piAgentRequest,PI_RUNTIME_VERSION} from './pi-agent.ts';
 import {piBatches} from './pi-batch.ts';
-import {stablePrompt} from './prompt-layout.ts';
+import {stablePrompt,PI_EDITORIAL_POLICY_VERSION} from './prompt-layout.ts';
 import { REASONING_BY_PURPOSE, REASONING_OUTPUT_FLOOR, REASONING_POLICY_VERSION, inferenceGuidance, INFERENCE_GUIDANCE_VERSION } from '@aihot/industry/reasoning';
 
 export interface ModelSpec {
@@ -193,7 +193,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   const thinking = (extra.thinking as { type?: unknown } | undefined)?.type;
   const thinkingEnabled = effort !== undefined && effort !== 'none';
   const guidance = effort !== undefined ? inferenceGuidance(opts.purpose) : null;
-  const layout=usePi&&typeof opts.user==='string'?stablePrompt(opts.system,opts.user,opts.purpose,opts.schema,spec.jsonMode&&opts.json!==false):{system:opts.system,user:opts.user};
+  const layout=usePi&&!Array.isArray(opts.user)?stablePrompt(opts.system,typeof opts.user==='string'?opts.user:JSON.stringify(opts.user),opts.purpose,opts.schema,spec.jsonMode&&opts.json!==false):{system:opts.system,user:opts.user};
   const system = [layout.system,guidance?.instruction,usePi?`【目标语言】面向读者的文本使用 ${targetLanguage}；固定字段名、专有名词及原文证据按原任务规则保留。`:null].filter(Boolean).join('\n\n');
   const userText=typeof layout.user==='string'?layout.user:JSON.stringify(layout.user);
   const templateHash=sha256(system);
@@ -229,6 +229,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
         instructionPolicy: guidance ? INFERENCE_GUIDANCE_VERSION : null,
         softThinkingTokens: guidance?.softThinkingTokens ?? null,
         runtime: usePi?'pi-agent-core':'direct',runtimeVersion:usePi?PI_RUNTIME_VERSION:null,
+        editorialPolicy:usePi?PI_EDITORIAL_POLICY_VERSION:null,
         templateHash,targetLanguage,
         thinking: typeof thinking === 'string' ? thinking : null,
         reasoningEffort: typeof extra.reasoning_effort === 'string' ? extra.reasoning_effort : null,

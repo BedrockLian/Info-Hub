@@ -1,24 +1,19 @@
 import {Agent} from '@earendil-works/pi-agent-core';
-import {createAssistantMessageEventStream,type AssistantMessage,type Model} from '@earendil-works/pi-ai';
+import {createAssistantMessageEventStream,type AssistantMessage,type ProviderStreams} from '@earendil-works/pi-ai';
 import type {CallOutcome} from './receipts.ts';
 import {cacheUsage,estimateFlashUsd} from './pricing.ts';
+import {createPiModelRuntime} from './pi-ai.ts';
 
 export const PI_RUNTIME_VERSION='1.2.0';
 
 /** One clean Pi agent per article task, custom transport retains native usage and receipt semantics. */
 export async function piAgentRequest(input:{body:Record<string,unknown>;baseUrl:string;apiKey:string;effort:'none'|'low'|'high';send:(body:Record<string,unknown>,signal?:AbortSignal)=>Promise<CallOutcome>}):Promise<CallOutcome>{
-  const model:Model<'openai-completions'>={id:String(input.body.model),name:'Info-Hub DeepSeek',api:'openai-completions',provider:'deepseek',baseUrl:input.baseUrl,
-    reasoning:true,input:['text'],contextWindow:1000000,maxTokens:Number(input.body.max_tokens),cost:{input:0.15,output:0.60,cacheRead:0.003,cacheWrite:0.15}};
   const messages=input.body.messages as Array<{role:string;content:string}>;
   const system=messages.find(m=>m.role==='system')?.content??'';
   const user=messages.find(m=>m.role==='user')?.content;
   if(typeof user!=='string')throw new Error('Pi editorial runtime requires one text-only article task');
   let outcome:CallOutcome|undefined,failure:unknown,requests=0;
-  const agent=new Agent({
-    initialState:{model,systemPrompt:system,thinkingLevel:input.effort==='none'?'off':input.effort,tools:[]},
-    getApiKey:()=>input.apiKey,
-    finishTurn:()=>({action:'end'}),
-    streamFn:(_model,context,options)=>{
+  const streamFn:ProviderStreams['streamSimple']=(_model,context,options)=>{
       const stream=createAssistantMessageEventStream();
       const message:AssistantMessage={role:'assistant',content:[],api:model.api,provider:model.provider,model:model.id,timestamp:Date.now(),stopReason:'stop',
         usage:{input:0,output:0,cacheRead:0,cacheWrite:0,totalTokens:0,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}};
@@ -43,7 +38,12 @@ export async function piAgentRequest(input:{body:Record<string,unknown>;baseUrl:
         }catch(error){failure=error;message.stopReason='error';message.errorMessage='Editorial provider request failed';stream.push({type:'error',reason:'error',error:message});}
       })();
       return stream;
-    },
+    };
+  const {models,model}=createPiModelRuntime({modelId:String(input.body.model),baseUrl:input.baseUrl,apiKey:input.apiKey,maxTokens:Number(input.body.max_tokens),streams:{stream:streamFn,streamSimple:streamFn}});
+  const agent=new Agent({
+    initialState:{model,systemPrompt:system,thinkingLevel:input.effort==='none'?'off':input.effort,tools:[]},
+    finishTurn:()=>({action:'end'}),
+    streamFn:models.streamSimple.bind(models),
   });
   await agent.prompt([{role:'user',content:user,timestamp:Date.now()}]);
   await agent.waitForIdle();
