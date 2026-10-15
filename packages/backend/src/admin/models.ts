@@ -12,6 +12,8 @@ interface UsageRow {
   model: string | null;
   prompt_version: string | null;
   runtime:string;
+  runtime_version:string|null;
+  input_band:string;
   effort:string|null;
   template_hash:string|null;
   calls: number;
@@ -24,10 +26,23 @@ interface UsageRow {
   tokens_out: string | null;
   cached_tokens: string | null;
   cache_input: string | null;
+  cache_known_calls:number;
+  reasoning_tokens:string|null;
+  reasoning_known_calls:number;
+  input_known_calls:number;
+  output_known_calls:number;
+  fixed_prefix_chars:number|null;
+  audit_calls:number;
   actual_cost: string | null;
   estimated_cost:string|null;
+  reserved_usd:string|null;
   currency: string | null;
 }
+
+// Mirror native counter validation: JSON numbers, nonnegative safe integers only. CASE guards casts.
+const safeCounter=(field:ReturnType<typeof sql>)=>sql`CASE WHEN jsonb_typeof(${field})='number' THEN
+  CASE WHEN (${field})::text::numeric BETWEEN 0 AND 9007199254740991
+    AND trunc((${field})::text::numeric)=(${field})::text::numeric THEN (${field})::text::numeric END END`;
 
 export async function modelsOverview(days = 7) {
   const since = new Date(Date.now() - days * 86400_000);
@@ -36,24 +51,37 @@ export async function modelsOverview(days = 7) {
     sql<UsageRow[]>`
       SELECT r.purpose, a.model, r.request->>'promptVersion' AS prompt_version,
              coalesce(r.request->>'runtime','direct') AS runtime,r.request->>'reasoningEffort' AS effort,r.request->>'templateHash' AS template_hash,
+             r.request->>'runtimeVersion' AS runtime_version,
+             CASE WHEN n.input IS NULL THEN 'unknown' WHEN n.input<=2048 THEN '0-2k' WHEN n.input<=8192 THEN '2k-8k' WHEN n.input<=32768 THEN '8k-32k' ELSE '32k+' END AS input_band,
+             a.currency,
              count(*)::int AS calls,
              count(*) FILTER (WHERE a.status = 'received')::int AS ok,
              count(*) FILTER (WHERE a.status = 'failed')::int AS failed,
              count(*) FILTER (WHERE a.status = 'unknown')::int AS unknown,
              percentile_disc(0.5) WITHIN GROUP (ORDER BY a.latency_ms) AS p50,
              percentile_disc(0.95) WITHIN GROUP (ORDER BY a.latency_ms) AS p95,
-             sum((a.usage->>'prompt_tokens')::bigint) AS tokens_in, sum((a.usage->>'completion_tokens')::bigint) AS tokens_out,
+             sum(n.input) AS tokens_in,sum(n.output) AS tokens_out,
              sum(c.hit) AS cached_tokens,
-             sum(CASE WHEN c.hit IS NOT NULL THEN (a.usage->>'prompt_tokens')::numeric END) AS cache_input,
+             sum(CASE WHEN c.hit IS NOT NULL THEN n.input END) AS cache_input,
+             count(*) FILTER(WHERE c.hit IS NOT NULL)::int AS cache_known_calls,
+             sum(CASE WHEN n.reasoning<=n.output THEN n.reasoning END) AS reasoning_tokens,
+             count(*) FILTER(WHERE n.reasoning<=n.output)::int AS reasoning_known_calls,
+             count(n.input)::int AS input_known_calls,count(n.output)::int AS output_known_calls,
+             max(n.prefix_chars) AS fixed_prefix_chars,count(n.prefix_chars)::int AS audit_calls,
              sum(a.cost) FILTER (WHERE a.cost_basis = 'actual') AS actual_cost,
-             sum(a.cost) FILTER (WHERE a.cost_basis = 'estimated') AS estimated_cost, max(a.currency) AS currency
+             sum(a.cost) FILTER (WHERE a.cost_basis = 'estimated') AS estimated_cost,
+             sum(a.budget_charge_usd) FILTER(WHERE a.cost IS NULL) AS reserved_usd
       FROM receipt_attempts a JOIN receipts r ON r.id = a.receipt_id
-      CROSS JOIN LATERAL (SELECT CASE WHEN jsonb_typeof(a.usage->'prompt_cache_hit_tokens')='number'
-        AND (a.usage->>'prompt_cache_hit_tokens')::numeric BETWEEN 0 AND (a.usage->>'prompt_tokens')::numeric
-        AND (NOT a.usage ? 'prompt_cache_miss_tokens' OR (a.usage->>'prompt_cache_hit_tokens')::numeric+(a.usage->>'prompt_cache_miss_tokens')::numeric=(a.usage->>'prompt_tokens')::numeric)
-        THEN (a.usage->>'prompt_cache_hit_tokens')::numeric END AS hit) c
+      CROSS JOIN LATERAL (SELECT ${safeCounter(sql`a.usage->'prompt_tokens'`)} AS input,
+        ${safeCounter(sql`a.usage->'completion_tokens'`)} AS output,
+        ${safeCounter(sql`a.usage->'prompt_cache_hit_tokens'`)} AS hit,
+        ${safeCounter(sql`a.usage->'prompt_cache_miss_tokens'`)} AS miss,
+        ${safeCounter(sql`a.usage#>'{completion_tokens_details,reasoning_tokens}'`)} AS reasoning,
+        ${safeCounter(sql`r.request#>'{promptAudit,prefixChars}'`)} AS prefix_chars) n
+      CROSS JOIN LATERAL (SELECT CASE WHEN n.hit<=n.input
+        AND (NOT a.usage ? 'prompt_cache_miss_tokens' OR n.hit+n.miss=n.input) THEN n.hit END AS hit) c
       WHERE a.started_at >= ${since} AND a.origin = 'live' AND a.model IS NOT NULL
-      GROUP BY 1, 2, 3, 4, 5, 6 ORDER BY 1, 7 DESC`,
+      GROUP BY 1,2,3,4,5,6,7,8,9 ORDER BY 1,calls DESC`,
     sql<{ service: string; model: string; currency: string; input_per_mtok: string | null; output_per_mtok: string | null }[]>`
       SELECT service, model, currency, input_per_mtok, output_per_mtok FROM service_prices`,
     sql<{ at: Date; actor: string; subject: string; reason: string | null; before: unknown; after: unknown }[]>`
@@ -68,7 +96,7 @@ export async function modelsOverview(days = 7) {
   const priced = (u: UsageRow) => {
     const service = u.model ? serviceOf(u.model) : null;
     const p = prices.find((x) => x.service === service && x.model === u.model) ?? prices.find((x) => x.service === service && x.model === "");
-    if (!p || (!p.input_per_mtok && !p.output_per_mtok)) return null;
+    if (!p || (!p.input_per_mtok && !p.output_per_mtok)||u.input_known_calls!==u.calls||u.output_known_calls!==u.calls) return null;
     return { amount: (Number(u.tokens_in ?? 0) / 1e6) * Number(p.input_per_mtok ?? 0) + (Number(u.tokens_out ?? 0) / 1e6) * Number(p.output_per_mtok ?? 0), currency: p.currency };
   };
   const cacheFor=(purposes:string[])=>{
@@ -90,6 +118,7 @@ export async function modelsOverview(days = 7) {
         model: u.model,
         promptVersion: u.prompt_version,
         runtime:u.runtime,effort:u.effort,templateHash:u.template_hash,
+        runtimeVersion:u.runtime_version,inputBand:u.input_band,
         calls: u.calls,
         ok: u.ok,
         failed: u.failed,
@@ -99,8 +128,15 @@ export async function modelsOverview(days = 7) {
         tokensIn: Number(u.tokens_in ?? 0),
         tokensOut: Number(u.tokens_out ?? 0),
         cachedInput:u.cached_tokens===null?null:Number(u.cached_tokens),
+        uncachedInput:u.cache_input===null?null:Number(u.cache_input)-Number(u.cached_tokens??0),
+        cacheKnownInput:u.cache_input===null?null:Number(u.cache_input),
+        cacheKnownCalls:u.cache_known_calls,cacheUnknownCalls:u.calls-u.cache_known_calls,
+        reasoningTokens:u.reasoning_tokens===null?null:Number(u.reasoning_tokens),reasoningKnownCalls:u.reasoning_known_calls,
+        inputKnownCalls:u.input_known_calls,outputKnownCalls:u.output_known_calls,
+        fixedPrefixChars:u.fixed_prefix_chars===null?null:Number(u.fixed_prefix_chars),auditCalls:u.audit_calls,
         cacheHitRate:u.cache_input===null||Number(u.cache_input)===0?null:Number(u.cached_tokens??0)/Number(u.cache_input),
         actualCost: u.actual_cost === null ? null : Number(u.actual_cost),
+        estimatedCost:u.estimated_cost===null?null:Number(u.estimated_cost),reservedUsd:Number(u.reserved_usd??0),
         currency: u.currency,
         estimate: u.estimated_cost===null?priced(u):{amount:Number(u.estimated_cost),currency:u.currency??'USD'},
       })),

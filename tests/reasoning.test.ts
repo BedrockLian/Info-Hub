@@ -125,6 +125,20 @@ test('admin cache metrics use native token details and report result reuse separ
   assert.ok(score.resultCache.hits>0);
 });
 
+test('private object inputs reuse canonical material and audit the exact final wire prefix without storing text',async()=>{
+ const hits=provider.hits();
+ const a=await call('summarize_article',{user:{title:'audit private sentinel',content:'原文\r\n  日期2026-10-15'},subject:subject+'-audit'});
+ const b=await call('summarize_article',{user:{content:'原文\r\n  日期2026-10-15',title:'audit private sentinel'},subject:subject+'-audit'});
+ assert.equal(b.reused,true);assert.equal(provider.hits(),hits+1);
+ const wire=requests.at(-1)!.messages;
+ const [r]=await sql`SELECT request FROM receipts WHERE id=${a.receiptId}`;
+ assert.equal(r!.request.promptAudit.prefixChars,wire[0].content.length);
+ assert.equal(r!.request.promptAudit.materialHash,sha256(wire[1].content));
+ assert.equal(JSON.stringify(r!.request).includes('audit private sentinel'),false);
+ assert.equal(JSON.parse(wire[1].content).content,'原文\r\n  日期2026-10-15');
+ await sql`DELETE FROM receipts WHERE id=${a.receiptId}`;
+});
+
 test('reasoning output ceiling is reserved before sending and still obeys the money stop',async()=>{
   const saved=config.modelBudgetDayUsd;
   const [spent]=await sql`SELECT coalesce(sum(budget_charge_usd),0) AS day FROM receipt_attempts WHERE origin='live' AND started_at>now()-interval '1 day'`;

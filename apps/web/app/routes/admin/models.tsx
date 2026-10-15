@@ -12,6 +12,8 @@ interface Usage {
   model: string | null;
   promptVersion: string | null;
   runtime:string;
+  runtimeVersion?:string|null;
+  inputBand?:string;
   effort:string|null;
   templateHash:string|null;
   calls: number;
@@ -24,6 +26,17 @@ interface Usage {
   tokensOut: number;
   cachedInput:number|null;
   cacheHitRate:number|null;
+  uncachedInput?:number|null;
+  cacheKnownCalls?:number;
+  cacheUnknownCalls?:number;
+  reasoningTokens?:number|null;
+  reasoningKnownCalls?:number;
+  inputKnownCalls?:number;
+  outputKnownCalls?:number;
+  fixedPrefixChars?:number|null;
+  auditCalls?:number;
+  estimatedCost?:number|null;
+  reservedUsd?:number;
   actualCost: number | null;
   currency: string | null;
   estimate: { amount: number; currency: string } | null;
@@ -46,6 +59,7 @@ export const meta: Route.MetaFunction = () => [{ title: `模型与评测 · ${SI
 
 const SOURCE_LABEL = { admin: "后台切换", env: "环境变量", default: "代码默认" } as const;
 const secs = (ms: number | null) => (ms == null ? "—" : ms >= 10_000 ? `${Math.round(ms / 1000)} s` : `${(ms / 1000).toFixed(1)} s`);
+const INPUT_BANDS:Record<string,string>={'0-2k':'≤2,048','2k-8k':'2,049–8,192','8k-32k':'8,193–32,768','32k+':'>32,768',unknown:'未知'};
 
 export default function ModelsAdmin({ loaderData: m }: Route.ComponentProps) {
   const { run, pending } = useAdminAction();
@@ -59,12 +73,13 @@ export default function ModelsAdmin({ loaderData: m }: Route.ComponentProps) {
       subtitle="每项能力当前用哪个模型、来自哪里（后台切换 > 环境变量 > 代码默认），以及近期的成功率、耗时与费用。切换只影响之后的新任务，已有结果不重算；换精选模型前先看 SelectBench 同批对比。"
       actions={<FilterChips param="days" options={[{ value: "1", label: "24 小时" }, { value: "", label: "7 天" }, { value: "30", label: "30 天" }]} />}
     >
-      <div className="grid gap-5">
+      <div className="grid grid-cols-1 gap-5">
         {m.capabilities.map((c) => {
           const total = c.usage.reduce((a, u) => a + u.calls, 0);
           return (
             <Card
               key={c.key}
+              className="min-w-0"
               title={
                 <span className="inline-flex flex-wrap items-center gap-2">
                   {c.label}
@@ -85,44 +100,41 @@ export default function ModelsAdmin({ loaderData: m }: Route.ComponentProps) {
               }
               pad={false}
             >
-              <div className="border-b border-line px-4 py-3 text-xs text-ink-3" title="结果复用统计已通过格式校验的任务；复用直接读取已完成回执，不调用模型。输入缓存比例按服务商返回的token明细计算。">
+              <div className="border-b border-line px-4 py-3 text-xs text-ink-3" title="结果复用不调用模型。输入缓存比例只使用明细有效的付费尝试，未知明细单列；输出不合格的尝试仍计入用量和费用。按执行版本、思考档位、模板、实际输入长度与币种分组。">
                 结果复用 {num(c.resultCache.hits)} / {num(c.resultCache.lookups)} 次 · 固定模板 {num(c.resultCache.templates)} 个
               </div>
               {c.usage.length ? (
                 <DataTable
                   dense
                   rows={c.usage}
-                  rowKey={(u) => `${u.purpose}|${u.model}|${u.promptVersion}|${u.runtime}|${u.effort}|${u.templateHash}`}
+                  rowKey={(u) => `${u.purpose}|${u.model}|${u.promptVersion}|${u.runtime}|${u.runtimeVersion}|${u.effort}|${u.templateHash}|${u.inputBand}|${u.currency}`}
                   columns={[
                     { key: "m", label: "模型", render: (u) => <span className="whitespace-nowrap font-mono text-[12px]">{u.model}</span> },
-                    { key:"runtime",label:"执行 / 思考",render:(u)=><span className="whitespace-nowrap" title={u.templateHash?`固定模板 ${u.templateHash}`:undefined}>{u.runtime==='pi-agent-core'?'Pi':'直连'} · {u.effort==='none'?'关闭':u.effort==='low'?'低':u.effort==='high'?'高':'默认'}</span> },
-                    { key: "v", label: "提示版本", render: (u) => <span className="whitespace-nowrap font-mono text-[11.5px] text-ink-3">{u.promptVersion ?? "—"}</span> },
-                    { key: "p", label: "用途", render: (u) => <span className="whitespace-nowrap font-mono text-[11.5px] text-ink-3">{u.purpose}</span> },
+                    { key:"runtime",label:"执行 / 思考",render:(u)=><span className="whitespace-nowrap" title={u.templateHash?`固定模板 ${u.templateHash}`:undefined}>{u.runtime==='pi-agent-core'?'Pi':'直连'} {u.runtimeVersion??'版本未记录'} · {u.effort==='none'?'关闭':u.effort==='low'?'低':u.effort==='high'?'高':'默认'}</span> },
+                    { key: "v", label: "提示版本 / 前缀", render: (u) => <div className="text-ink-3"><span className="whitespace-nowrap font-mono text-[11.5px]">{u.promptVersion ?? "—"}</span><div className="mt-1 whitespace-nowrap text-xs">{u.fixedPrefixChars==null?'前缀未记录':`${num(u.fixedPrefixChars)} 字符 · 审计 ${num(u.auditCalls??0)}/${num(u.calls)}`}</div></div> },
+                    { key: "p", label: "用途 / 输入长度", render: (u) => <div className="text-ink-3"><span className="whitespace-nowrap font-mono text-[11.5px]">{u.purpose}</span><div className="mt-1 whitespace-nowrap text-xs">{INPUT_BANDS[u.inputBand??'unknown']??'未知'} token</div></div> },
                     { key: "c", label: "调用", align: "right", render: (u) => num(u.calls) },
                     {
                       key: "ok",
-                      label: "成功率",
+                      label: "可用输出率",
                       align: "right",
                       render: (u) => {
                         const rate = u.calls ? u.ok / u.calls : 0;
-                        return <span className={rate < 0.95 ? "text-hot" : ""} title={`失败 ${u.failed} · 结果未知 ${u.unknown}`}>{`${Math.round(rate * 1000) / 10}%`}</span>;
+                        return <span className={rate < 0.95 ? "text-hot" : ""} title={`失败 ${u.failed} · 结果未知 ${u.unknown}。格式可用不代表事实准确率。`}>{`${Math.round(rate * 1000) / 10}%`}</span>;
                       },
                     },
                     { key: "l", label: "耗时 p50 / p95", align: "right", render: (u) => <span className="whitespace-nowrap">{`${secs(u.p50)} / ${secs(u.p95)}`}</span> },
-                    { key: "t", label: "输入 / 输出 token", align: "right", render: (u) => <span className="whitespace-nowrap">{`${num(u.tokensIn)} / ${num(u.tokensOut)}`}</span> },
-                    { key:"cache",label:"输入缓存命中",align:"right",render:(u)=><span className="whitespace-nowrap">{u.cacheHitRate===null?'未返回明细':`${(u.cacheHitRate*100).toFixed(1)}% · ${num(u.cachedInput??0)} token`}</span> },
+                    { key: "t", label: "输入 / 输出 token", align: "right", render: (u) => <div className="whitespace-nowrap">{`${u.inputKnownCalls===0?'未知':num(u.tokensIn)} / ${u.outputKnownCalls===0?'未知':num(u.tokensOut)}`}<div className="mt-1 text-xs text-ink-3">{u.reasoningTokens==null?'思考明细未知':`思考 ${num(u.reasoningTokens)} · 明细 ${num(u.reasoningKnownCalls??0)}/${num(u.calls)} 次`}</div>{u.inputKnownCalls!==undefined&&(u.inputKnownCalls!==u.calls||u.outputKnownCalls!==u.calls)&&<div className="mt-1 text-xs text-ink-3">用量明细 {num(u.inputKnownCalls)}/{num(u.calls)} · {num(u.outputKnownCalls??0)}/{num(u.calls)} 次</div>}</div> },
+                    { key:"cache",label:"输入缓存命中",align:"right",render:(u)=><div className="whitespace-nowrap">{u.cacheHitRate===null?'未返回有效明细':`${(u.cacheHitRate*100).toFixed(1)}%`}{u.cacheKnownCalls!==undefined&&<div className="mt-1 text-xs text-ink-3">明细 {num(u.cacheKnownCalls)}/{num(u.calls)} 次 · 未知 {num(u.cacheUnknownCalls??0)}</div>}{u.cachedInput!==null&&<div className="mt-1 text-xs text-ink-3">命中 {num(u.cachedInput)} / 未中 {u.uncachedInput==null?'未知':num(u.uncachedInput)}</div>}</div> },
                     {
                       key: "$",
                       label: "费用",
                       align: "right",
-                      render: (u) =>
-                        u.actualCost !== null ? (
-                          `${money(u.actualCost)}${u.currency && u.currency !== "CNY" ? ` ${u.currency}` : ""}`
-                        ) : u.estimate ? (
-                          <span title="按用量 × 单价推算">≈ {money(u.estimate.amount)}{u.estimate.currency !== "CNY" ? ` ${u.estimate.currency}` : ""}</span>
-                        ) : (
-                          <span className="whitespace-nowrap text-ink-4" title="服务商没有返回费用，按 token 数和你的模型单价自己估算">未定价</span>
-                        ),
+                      render: (u) => {
+                        const estimated=u.estimatedCost??(u.actualCost===null?u.estimate?.amount:null);
+                        const currency=u.currency??u.estimate?.currency??'';
+                        return <div className="whitespace-nowrap">{u.actualCost!==null&&<div>{money(u.actualCost,currency)} {currency}</div>}{estimated!=null&&<div title="估算与实计分别显示；输出不合格的付费尝试也计入">≈ {money(estimated,currency)} {currency}</div>}{u.actualCost===null&&estimated==null&&<span className="text-ink-4">费用未知</span>}{(u.reservedUsd??0)>0&&<div className="mt-1 text-xs text-ink-3">未结算预留 {money(u.reservedUsd!,'USD')}</div>}</div>;
+                      },
                     },
                   ]}
                 />

@@ -11,6 +11,7 @@ import { sql } from "../db.ts";
 import {piAgentRequest,PI_RUNTIME_VERSION} from './pi-agent.ts';
 import {piBatches} from './pi-batch.ts';
 import {stablePrompt,PI_EDITORIAL_POLICY_VERSION} from './prompt-layout.ts';
+import {auditPrompt,privateUserText} from './prompt-audit.ts';
 import { REASONING_BY_PURPOSE, REASONING_OUTPUT_FLOOR, REASONING_POLICY_VERSION, inferenceGuidance, INFERENCE_GUIDANCE_VERSION } from '@aihot/industry/reasoning';
 
 export interface ModelSpec {
@@ -98,7 +99,7 @@ export interface ChatJsonOptions<S extends z.ZodType> {
   subject: string;
   promptVersion: string;
   system: string;
-  user: string | ContentPart[];
+  user: string | ContentPart[] | Record<string,unknown>;
   schema: S;
   temperature?: number;
   maxTokens?: number;
@@ -193,7 +194,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   const thinking = (extra.thinking as { type?: unknown } | undefined)?.type;
   const thinkingEnabled = effort !== undefined && effort !== 'none';
   const guidance = effort !== undefined ? inferenceGuidance(opts.purpose) : null;
-  const layout=usePi&&!Array.isArray(opts.user)?stablePrompt(opts.system,typeof opts.user==='string'?opts.user:JSON.stringify(opts.user),opts.purpose,opts.schema,spec.jsonMode&&opts.json!==false):{system:opts.system,user:opts.user};
+  const layout=usePi&&!Array.isArray(opts.user)?stablePrompt(opts.system,privateUserText(opts.user),opts.purpose,opts.schema,spec.jsonMode&&opts.json!==false):{system:opts.system,user:opts.user};
   const system = [layout.system,guidance?.instruction,usePi?`【目标语言】面向读者的文本使用 ${targetLanguage}；固定字段名、专有名词及原文证据按原任务规则保留。`:null].filter(Boolean).join('\n\n');
   const userText=typeof layout.user==='string'?layout.user:JSON.stringify(layout.user);
   const templateHash=sha256(system);
@@ -212,6 +213,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   };
 
   const budgeted = config.privateSite;
+  const promptAudit=usePi&&!Array.isArray(opts.user)?auditPrompt(body.messages as Array<{role:string;content:string}>):null;
   if (budgeted && (spec.model !== "deepseek-flash" || new URL(baseUrl).hostname !== "api.deepseek.com" || Array.isArray(opts.user))) throw new Error("Private Info-Hub requires the configured text-only DeepSeek Flash pricing for cost control");
   const maxCostUsd = budgeted ? reserveFlashUsd(JSON.stringify(body), maxTokens) : undefined;
 
@@ -230,7 +232,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
         softThinkingTokens: guidance?.softThinkingTokens ?? null,
         runtime: usePi?'pi-agent-core':'direct',runtimeVersion:usePi?PI_RUNTIME_VERSION:null,
         editorialPolicy:usePi?PI_EDITORIAL_POLICY_VERSION:null,
-        templateHash,targetLanguage,
+        templateHash,targetLanguage,promptAudit,
         thinking: typeof thinking === 'string' ? thinking : null,
         reasoningEffort: typeof extra.reasoning_effort === 'string' ? extra.reasoning_effort : null,
         reasoningPolicy: effort !== undefined ? REASONING_POLICY_VERSION : null },
@@ -282,7 +284,7 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
     parsed = opts.schema.parse(opts.parse ? opts.parse(content) : extractJson(content));
   } catch (error) {
     // Unusable output: record it and let a later attempt pay for a fresh answer.
-    await rejectReceivedResponse(receipt.receiptId, `unusable output: ${String(error).slice(0, 500)}`);
+    await rejectReceivedResponse(receipt.receiptId, `unusable output: ${String(error).slice(0, 500)}`,receipt.attempt);
     throw new ModelOutputError(`Model ${opts.model} returned unusable output for ${opts.subject}: ${String(error).slice(0, 300)}`);
   }
   if(usePi)await sql`INSERT INTO model_result_cache_events (receipt_id,purpose,subject,template_hash,content_hash,target_language,reused)

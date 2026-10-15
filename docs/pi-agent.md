@@ -1,5 +1,7 @@
 # Pi Agent Core 接入与缓存
 
+2026-10-15缓存优化第一阶段已完成验收、待发布：实际请求前缀审计、运行版本/输入长度分层、原生明细覆盖率及无效输出的尝试级统计。见 [本版行为与验收](cache-observability.md)。批处理仍为每批8件、并发2，尚未开启第二阶段调度实验。
+
 2026-10-14 已发布 `2a5de6225931f521a55f7d879425b65e2a30b608`。API、worker、web 三个运行镜像及 current 标记一致；生产私有访问烟测和后台模型页验收通过。以下断连、待发布及Windows限制是早期过程记录，以本段及最终核验为准。
 
 本次使用用户提供的官方仓库 https://github.com/earendil-works/pi ，固定依赖 `@earendil-works/pi-agent-core@1.2.0` 与 `@earendil-works/pi-ai@1.2.0`。不再使用旧的 mariozechner 包名。

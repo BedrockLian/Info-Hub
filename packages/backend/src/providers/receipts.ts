@@ -66,6 +66,7 @@ export interface ReceiptRequest {
 
 export interface ReceiptResult {
   receiptId: number;
+  attempt: number;
   response: unknown;
   reused: boolean;
 }
@@ -79,6 +80,7 @@ export function logicalKeyFor(req: ReceiptRequest): string {
 
 interface ReceiptRow {
   id: number;
+  attempts: number;
   status: string;
   response: unknown;
   created_at: Date;
@@ -127,7 +129,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
     // Serialise budget checks per service so concurrent workers cannot overshoot.
     await tx`SELECT pg_advisory_xact_lock(hashtext(${"budget:" + req.service}))`;
     const [existing] = await tx<ReceiptRow[]>`
-      SELECT id, status, response, created_at, updated_at FROM receipts WHERE logical_key = ${logicalKey} FOR UPDATE`;
+      SELECT id, attempts, status, response, created_at, updated_at FROM receipts WHERE logical_key = ${logicalKey} FOR UPDATE`;
     if (existing) {
       if (existing.status === "received" || existing.status === "completed") return { kind: "reuse" as const, row: existing };
       if (existing.status === "pending") {
@@ -143,7 +145,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
       const [r] = await tx<{ attempts: number }[]>`
         UPDATE receipts SET status = 'pending', attempts = attempts + 1, error = NULL, updated_at = now() WHERE id = ${existing.id} RETURNING attempts`;
       const attemptId = await startAttempt(tx, existing.id, r!.attempts, req);
-      return { kind: "call" as const, id: existing.id, attemptId };
+      return { kind: "call" as const, id: existing.id, attemptId,attempt:r!.attempts };
     }
     req.assertAvailable?.();
     await checkMoneyBudget(tx, req);
@@ -154,10 +156,10 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
               ${tx.json((req.requestSummary ?? {}) as never)}, 1)
       RETURNING id`;
     const attemptId = await startAttempt(tx, row!.id, 1, req);
-    return { kind: "call" as const, id: row!.id, attemptId };
+    return { kind: "call" as const, id: row!.id, attemptId,attempt:1 };
   });
 
-  if (claimed.kind === "reuse") return { receiptId: claimed.row.id, response: claimed.row.response, reused: true };
+  if (claimed.kind === "reuse") return { receiptId: claimed.row.id, attempt:claimed.row.attempts,response: claimed.row.response, reused: true };
   if (claimed.kind === "busy") throw new ReceiptBusyError(`Receipt ${claimed.row.id} is in flight`);
   if (claimed.kind === "unknown") {
     throw new ReceiptUnknownError(claimed.row.id, `Receipt ${claimed.row.id} has an unknown outcome; it is released once automatically, then from the admin`);
@@ -210,7 +212,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
         latency_ms = ${Date.now() - started}, finished_at = now()
       WHERE id = ${attemptId}`;
   });
-  return { receiptId, response: outcome.response, reused: false };
+  return { receiptId, attempt:claimed.attempt,response: outcome.response, reused: false };
 }
 
 async function startAttempt(tx: Db, receiptId: number, attempt: number, req: ReceiptRequest): Promise<number> {
@@ -240,6 +242,13 @@ export async function completeReceipt(db: Db, receiptId: number): Promise<void> 
 }
 
 /** Marks a received response that could not be used (e.g. unparsable) so a fresh attempt can be made. */
-export async function rejectReceivedResponse(receiptId: number, reason: string): Promise<void> {
-  await sql`UPDATE receipts SET status = 'failed', error = ${reason.slice(0, 2000)}, updated_at = now() WHERE id = ${receiptId}`;
+export async function rejectReceivedResponse(receiptId: number, reason: string,attempt:number): Promise<void> {
+  await sql.begin(async tx=>{
+    const changed=await tx`UPDATE receipts SET status = 'failed', error = ${reason.slice(0, 2000)}, updated_at = now()
+      WHERE id = ${receiptId} AND attempts=${attempt} AND status IN ('received','completed') RETURNING id`;
+    if(!changed.length)return;
+    // Preserve usage and money for the billed answer; never rewrite an earlier attempt.
+    await tx`UPDATE receipt_attempts SET status='failed',error=${reason.slice(0,2000)}
+      WHERE receipt_id=${receiptId} AND attempt=${attempt} AND status='received'`;
+  });
 }
