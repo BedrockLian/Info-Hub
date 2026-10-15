@@ -46,11 +46,13 @@ export async function collectFindings(now = Date.now()): Promise<Finding[]> {
       SELECT count(*) FILTER (WHERE processing_state = 'new' AND discovered_at < now() - interval '2 hours')::int AS waiting,
              min(discovered_at) FILTER (WHERE processing_state = 'new') AS oldest,
              count(*) FILTER (WHERE processing_state = 'failed' AND discovered_at > now() - interval '3 hours')::int AS failed
-      FROM articles WHERE processing_state IN ('new', 'failed') AND discovered_at > now() - interval '2 days'`;
+      FROM articles WHERE processing_state IN ('new', 'failed') AND discovered_at > now() - interval '2 days'
+        AND EXISTS (SELECT 1 FROM sources s WHERE s.id=articles.source_id AND s.enabled)`;
     if (p!.waiting >= 10 || p!.failed >= 20) {
       const errors = await sql<{ error: string; n: number }[]>`
         SELECT left(coalesce(processing_error, '（无）'), 120) AS error, count(*)::int AS n FROM articles
         WHERE processing_state IN ('new', 'failed') AND discovered_at > now() - interval '3 hours' AND processing_error IS NOT NULL
+          AND EXISTS (SELECT 1 FROM sources s WHERE s.id=articles.source_id AND s.enabled)
         GROUP BY 1 ORDER BY 2 DESC LIMIT 3`;
       out.push({
         key: "content.process",

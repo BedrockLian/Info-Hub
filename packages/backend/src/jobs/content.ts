@@ -3,6 +3,8 @@
 // safety net only picks up articles nothing is working on and sends those still waiting for a body to
 // extraction first. A provider outage makes an article wait and retry with backoff; only a permanent
 // refusal or exhausted retries end in "failed", which the admin re-queues in bulk.
+// Disabled sources pause work before it starts. Articles, paid receipts and retry evidence survive;
+// enabling the source lets the ordinary queue/sweeper (or failed-article retry) resume it.
 import type { PgBoss } from "pg-boss";
 import { sql, type Db } from "../db.ts";
 import { extractArticleBody, pageFetchable } from "../content/extract.ts";
@@ -41,7 +43,7 @@ async function route(articleId: string, db: Db): Promise<Route | null> {
   const [row] = await db<{ body_status: string; participation_mode: string; kind: string; config: Record<string, unknown>; url: string; bare: boolean; backfill: boolean; published_at: Date | null; discovered_at: Date }[]>`
     SELECT a.body_status, s.participation_mode, s.kind, s.config, a.url, (coalesce(a.body_text, '') = '' AND a.x_post IS NULL) AS bare,
            a.backfill, a.published_at, a.discovered_at
-    FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = ${articleId}`;
+    FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = ${articleId} AND s.enabled`;
   if (!row) return null;
   const historical = isHistorical(row);
   const signal = row.participation_mode !== "editorial";
@@ -67,7 +69,10 @@ const PRIORITY = { live: 0, liveSignal: -1, history: -2 } as const;
 export async function queueProcessing(articleId: string, opts: { step?: Step; attemptTag?: string; db?: Db } = {}): Promise<string | null> {
   const db = opts.db ?? sql;
   const r = await route(articleId, db);
-  if (!r) return null;
+  if (!r) {
+    await db`UPDATE articles SET processing_queued_at = NULL WHERE id = ${articleId}`;
+    return null;
+  }
   const step = opts.step ?? r.step;
   await db`UPDATE articles SET processing_queued_at = now() WHERE id = ${articleId}`;
   if (step === "extract") return enqueue(QUEUES.extractBody, { articleId }, { singletonKey: articleId, priority: r.historical ? PRIORITY.history : PRIORITY.live }, opts.db);
@@ -95,9 +100,13 @@ export async function settleNonEditorial(articleId: string): Promise<{ group: bo
 
 /** attemptTag makes an explicit re-evaluation a new (paid) request; the same tag reuses its receipt. */
 export async function processArticle(articleId: string, opts: { attemptTag?: string } = {}): Promise<{ state: string }> {
-  const [found] = await sql<{ participation_mode: string; processing_state: string; revision: number; backfill: boolean; published_at: Date | null; discovered_at: Date }[]>`
-    SELECT s.participation_mode, a.processing_state, a.revision, a.backfill, a.published_at, a.discovered_at FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = ${articleId}`;
+  const [found] = await sql<{ enabled: boolean; participation_mode: string; processing_state: string; revision: number; backfill: boolean; published_at: Date | null; discovered_at: Date }[]>`
+    SELECT s.enabled, s.participation_mode, a.processing_state, a.revision, a.backfill, a.published_at, a.discovered_at FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = ${articleId}`;
   if (!found) return { state: "missing" };
+  if (!found.enabled) {
+    await sql`UPDATE articles SET processing_queued_at = NULL WHERE id = ${articleId}`;
+    return { state: "paused" };
+  }
   const row = { ...found, historical: isHistorical(found) };
   if (row.participation_mode !== "editorial") {
     // Normally queued straight for grouping (queueProcessing); an explicit re-evaluation lands here.
@@ -164,7 +173,7 @@ export async function registerContentJobs(boss: PgBoss, concurrency = Number(pro
     const { articleId, attemptTag } = job.data;
     try {
       const result = await processArticle(articleId, { attemptTag });
-      if (result.state !== "unknown-receipt") {
+      if (result.state !== "unknown-receipt" && result.state !== "paused") {
         await sql`UPDATE articles SET processing_attempts = 0, processing_retry_at = NULL, processing_queued_at = NULL WHERE id = ${articleId}`;
       }
       return result;
@@ -183,6 +192,12 @@ export async function registerExtractionJobs(boss: PgBoss) {
   await boss.work<{ articleId: string }>(QUEUES.extractBody, { localConcurrency: 4, pollingIntervalSeconds: 2 }, async ([job]) => {
     if (!job) return;
     const { articleId } = job.data;
+    const [source] = await sql`SELECT s.enabled FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.id=${articleId}`;
+    if (!source) return { state: "missing" };
+    if (!source.enabled) {
+      await sql`UPDATE articles SET processing_queued_at = NULL WHERE id = ${articleId}`;
+      return { state: "paused" };
+    }
     try {
       const state = await extractArticleBody(articleId);
       await queueProcessing(articleId, { step: "analyze" });
@@ -207,11 +222,11 @@ export async function registerExtractionJobs(boss: PgBoss) {
  */
 export async function sweepUnprocessed(): Promise<{ enqueued: number }> {
   const rows = await sql<{ id: string }[]>`
-    SELECT id FROM articles
-    WHERE processing_state = 'new' AND created_at < now() - interval '3 minutes'
-      AND (processing_retry_at IS NULL OR processing_retry_at <= now())
-      AND (processing_queued_at IS NULL OR processing_queued_at < now() - ${QUEUED_STALE}::interval)
-    ORDER BY discovered_at DESC LIMIT 500`;
+    SELECT a.id FROM articles a JOIN sources s ON s.id=a.source_id
+    WHERE s.enabled AND a.processing_state = 'new' AND a.created_at < now() - interval '3 minutes'
+      AND (a.processing_retry_at IS NULL OR a.processing_retry_at <= now())
+      AND (a.processing_queued_at IS NULL OR a.processing_queued_at < now() - ${QUEUED_STALE}::interval)
+    ORDER BY a.discovered_at DESC LIMIT 500`;
   for (const r of rows) await queueProcessing(r.id);
   return { enqueued: rows.length };
 }
@@ -228,6 +243,7 @@ export async function requeueFailed(group: string | null): Promise<{ requeued: n
   const rows = await sql<{ id: string }[]>`
     UPDATE articles SET processing_state = 'new', processing_attempts = 0, processing_retry_at = NULL, processing_error = NULL
     WHERE processing_state = 'failed' AND discovered_at > now() - interval '30 days'
+      AND EXISTS (SELECT 1 FROM sources s WHERE s.id=articles.source_id AND s.enabled)
       AND (${group}::text IS NULL OR ${failureGroupSql()} = ${group})
     RETURNING id`;
   for (const r of rows.slice(0, 500)) await queueProcessing(r.id);

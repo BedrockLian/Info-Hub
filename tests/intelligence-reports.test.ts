@@ -16,7 +16,8 @@ import {stopBoss} from '@aihot/backend/jobs/queue';
 import {beijingDate,beijingMidnight,addDays} from '@aihot/contracts/time';
 import {BudgetExceededError} from '@aihot/backend/providers/receipts';
 
-const T=tag(),source=`intelligence-${T}`,date=beijingDate(new Date()),morning=new Date(beijingMidnight(date).getTime()+8*3600000),published=new Date(morning.getTime()-2*3600000);
+// Use a completed Beijing day: before 08:00, today's fixture publications would be in the future.
+const T=tag(),source=`intelligence-${T}`,date=addDays(beijingDate(new Date()),-1),morning=new Date(beijingMidnight(date).getTime()+8*3600000),published=new Date(morning.getTime()-2*3600000);
 let mode:'normal'|'invalid'|'held'='normal',held=gate(),entered=gate();
 const wire:Record<string,any>[]=[];
 const provider=await stub(async(_hit,req)=>{

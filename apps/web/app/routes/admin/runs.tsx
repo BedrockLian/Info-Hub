@@ -21,6 +21,7 @@ interface Runs {
   deliveries: Row[];
   errors: Row[];
   retrying: { count: number; next: string | null };
+  processing?: { activePending: number; pausedPending: number };
   ingest: Row[];
   leaderboard: { at: string; sources: Array<{ key: string; ok: boolean; at: string; lastOkAt: string | null; changed?: boolean; rows?: number; error?: string }> } | null;
 }
@@ -69,6 +70,8 @@ export default function RunsAdmin({ loaderData }: Route.ComponentProps) {
         <Stat label="失败的定时任务" value={num(failing.length)} tone={failing.length ? "bad" : "ok"} hint="最近一次运行失败" />
         <Stat label="回执结果未知" value={num(r.receipts.issues.filter((x) => x.status === "unknown").length)} tone={r.receipts.issues.some((x) => x.status === "unknown") ? "bad" : "ok"} hint={`7 天 ${num(Object.values(r.receipts.counts).reduce((a, b) => a + b, 0))} 次付费请求`} />
         <Stat label="投递待核实" value={num(r.deliveries.filter((d) => d.status === "unknown").length)} tone={r.deliveries.some((d) => d.status === "unknown") ? "bad" : "ok"} />
+        {r.processing && <Stat label="启用源积压" value={num(r.processing.activePending)} hint="等待处理及失败的文章" />}
+        {r.processing && <Stat label="暂停保留" value={num(r.processing.pausedPending)} hint="停用源的未完成文章；重新启用后可恢复" />}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -291,7 +294,7 @@ export default function RunsAdmin({ loaderData }: Route.ComponentProps) {
       <ReasonDialog
         open={requeue !== null}
         title={requeue ? "重新处理这一类失败" : "重新处理全部失败"}
-        description="这些文章会重新进入处理队列（正文、判断、发布）。模型调用会重新计费；供应商拒绝的内容可能再次失败。"
+        description="仅启用来源的失败文章会重新进入处理队列（正文、判断、发布），停用来源继续暂停。模型调用会重新计费；供应商拒绝的内容可能再次失败。"
         confirmLabel="重新处理"
         busy={pending === "requeue"}
         onClose={() => setRequeue(null)}

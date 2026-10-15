@@ -45,17 +45,23 @@ export async function runsOverview() {
     sql`
       SELECT ${failureGroupSql()} AS error, count(*)::int AS n, max(discovered_at) AS last,
              (array_agg(id ORDER BY discovered_at DESC))[1] AS example
-      FROM articles WHERE processing_state = 'failed' AND discovered_at > now() - interval '30 days' GROUP BY 1 ORDER BY 2 DESC LIMIT 20`,
+      FROM articles WHERE processing_state = 'failed' AND discovered_at > now() - interval '30 days'
+        AND EXISTS (SELECT 1 FROM sources s WHERE s.id=articles.source_id AND s.enabled) GROUP BY 1 ORDER BY 2 DESC LIMIT 20`,
     sql`SELECT client, kind, status, left(error, 200) AS error, summary, created_at FROM ingest_events ORDER BY created_at DESC LIMIT 20`,
     sql<{ value: { at: string; sources: Record<string, { ok: boolean; at: string; lastOkAt: string | null; changed?: boolean; rows?: number; error?: string }> } }[]>`
       SELECT value FROM settings WHERE key = 'leaderboard.fetch'`,
   ]);
   // Articles waiting to retry after a passing provider problem (they are not failed).
   const [retrying] = await sql<{ n: number; next: Date | null }[]>`
-    SELECT count(*)::int AS n, min(processing_retry_at) AS next FROM articles WHERE processing_state = 'new' AND processing_attempts > 0`;
+    SELECT count(*)::int AS n, min(processing_retry_at) AS next FROM articles WHERE processing_state = 'new' AND processing_attempts > 0
+      AND EXISTS (SELECT 1 FROM sources s WHERE s.id=articles.source_id AND s.enabled)`;
+  const [processing] = await sql<{ activePending: number; pausedPending: number }[]>`
+    SELECT count(*) FILTER(WHERE s.enabled)::int AS "activePending",count(*) FILTER(WHERE NOT s.enabled)::int AS "pausedPending"
+    FROM articles a JOIN sources s ON s.id=a.source_id WHERE a.processing_state IN ('new','failed')`;
   const now = Date.now();
   return {
     checkedAt: new Date(now).toISOString(),
+    processing: processing!,
     processes: heartbeats.map((h) => ({
       role: h.key.slice("heartbeat.".length),
       ...h.value,
@@ -92,7 +98,8 @@ async function release(id: number, error: string, actor: string, note: string, b
   let requeued = false;
   if (article) {
     const [a] = await sql`UPDATE articles SET processing_state = 'new', processing_attempts = 0, processing_retry_at = NULL, processing_error = NULL
-                          WHERE id = ${article} AND processing_state = 'failed' RETURNING id`;
+                          WHERE id = ${article} AND processing_state = 'failed'
+                            AND EXISTS (SELECT 1 FROM sources s WHERE s.id=articles.source_id AND s.enabled) RETURNING id`;
     if (a) requeued = !!(await queueProcessing(article, { step: "analyze" }));
   }
   await audit(actor, "receipt.release", `receipt:${id}`, note, { status: "unknown" }, { status: "failed", billed, requeued });
