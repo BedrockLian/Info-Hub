@@ -55,7 +55,7 @@ export default function DailyArchive() {
                   <span className="min-w-0">
                     <span className="block text-[15px] font-bold leading-[1.55] text-ink transition-colors group-hover:text-accent">{e.title ?? `${withSubject("日报")} ${e.key}`}</span>
                     <span className="mt-1 block text-[12px] text-ink-4">
-                      <span className="num">{e.count}</span> 件大事
+                      <span className="num">{e.count}</span> 件情报
                     </span>
                   </span>
                 </Link>

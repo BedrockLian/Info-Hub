@@ -32,14 +32,14 @@ interface Availability {
 async function availability(ids: string[]): Promise<Map<string, Availability>> {
   const out = new Map<string, Availability>();
   if (ids.length === 0) return out;
-  const rows = await sql<{ id: string; visibility: string; eligible: boolean; first_party: boolean; source_id: string; icon_url: string | null; story_public_id: string | null; at: Date | null }[]>`
-    SELECT p.article_id AS id, p.visibility, p.eligible, p.first_party, p.source_id, s.icon_url, st.public_id::text AS story_public_id,
+  const rows = await sql<{ id: string; visibility: string; eligible: boolean; selected:boolean; visible_after:Date|null; first_party: boolean; source_id: string; icon_url: string | null; story_public_id: string | null; at: Date | null }[]>`
+    SELECT p.article_id AS id, p.visibility, p.eligible, p.selected, p.visible_after, p.first_party, p.source_id, s.icon_url, st.public_id::text AS story_public_id,
       coalesce(p.published_at, p.discovered_at) AS at
     FROM publications p LEFT JOIN sources s ON s.id = p.source_id LEFT JOIN stories st ON st.id = p.story_id
     WHERE p.article_id IN ${sql(ids)}`;
   for (const r of rows) {
     out.set(r.id, {
-      available: r.visibility === "public" && r.eligible,
+      available: r.visibility === "public" && r.eligible && (!r.selected || !!r.visible_after&&r.visible_after.getTime()<=Date.now()),
       firstParty: r.first_party,
       sourceId: r.source_id,
       sourceIcon: r.icon_url,
@@ -51,23 +51,26 @@ async function availability(ids: string[]): Promise<Map<string, Availability>> {
 }
 
 function citations(content: Record<string, any>): Array<Record<string, any>> {
-  return [...(content.sections ?? []).flatMap((s:any)=>s.items ?? []),
+  const primary=[...(content.sections ?? []).flatMap((s:any)=>s.items ?? []),
     ...(content.themes ?? []).flatMap((t:any)=>t.storyRefs ?? []), ...(content.flashes ?? [])];
+  return primary.flatMap(i=>i.latestUpdate?[i,i.latestUpdate]:[i]);
 }
 
 // A lead or theme paragraph may summarize any citation. Without sentence-level provenance, discard
 // that prose as soon as one citation is no longer readable. Check current state on every private read.
 async function safeReportContent(content: Record<string, any>): Promise<Record<string, any>> {
-  if (!config.privateSite) return content;
+  if (!config.privateSite&&!content.generator?.inputHash) return content;
   const avail = await availability([...new Set(citations(content).map(i=>i.itemId).filter(Boolean))]);
   if (!citations(content).some(i=>i.itemId && !avail.get(i.itemId)?.available)) return content;
   const safe = structuredClone(content);
   for (const key of ['lead','title','headline','overview']) delete safe[key];
   const readable = (i:any)=>!i.itemId || avail.get(i.itemId)?.available === true;
   safe.sections=(safe.sections ?? []).map((s:any)=>({...s,items:(s.items ?? []).filter(readable)}));
+  for(const section of safe.sections)for(const item of section.items)if(item.latestUpdate&&!readable(item.latestUpdate))delete item.latestUpdate;
   safe.themes=(safe.themes ?? []).map((t:any)=>({...t,heading:'已更新的主题',summary:null,storyRefs:(t.storyRefs ?? []).filter(readable)}));
   safe.flashes=(safe.flashes ?? []).filter(readable);
   safe.highlights=(safe.highlights ?? []).filter((id:string)=>avail.get(id)?.available === true);
+  if(typeof safe.metrics?.focusCount==='number'){const items=safe.sections.flatMap((s:any)=>s.items);safe.metrics={...safe.metrics,totalEvents:items.length,focusCount:items.filter((i:any)=>i.editionRole==='focus').length,briefCount:items.filter((i:any)=>i.editionRole==='brief').length,sourcesCount:new Set(items.flatMap((i:any)=>[i.sourceId,...(i.latestUpdate?[i.latestUpdate.sourceId]:[])])).size};}
   return safe;
 }
 
@@ -148,6 +151,8 @@ function citationFrom(raw: Record<string, any>, avail: Map<string, Availability>
     };
   }
   return {
+    editionRole:raw.editionRole,updateType:raw.updateType,
+    latestUpdate:raw.latestUpdate?citationFrom(raw.latestUpdate,avail):null,
     itemId: id,
     title: String(raw.title ?? ""),
     summary: raw.summary ?? null,
@@ -230,7 +235,7 @@ export async function loadReport(kind: ReportKind, key: string): Promise<ReportD
     ...(c.flashes ?? []),
     ...(c.themes ?? []).flatMap((t: any) => t.storyRefs ?? []),
   ];
-  const avail = await availability([...new Set(rawItems.map((i) => i.itemId).filter(Boolean))]);
+  const avail = await availability([...new Set(citations(c).map((i) => i.itemId).filter(Boolean))]);
   const cite = (raw: Record<string, any>) => citationFrom(raw, avail);
 
   const sections = kind === "daily"
@@ -248,9 +253,10 @@ export async function loadReport(kind: ReportKind, key: string): Promise<ReportD
   const highlights = highlightIds.length
     ? highlightIds.map((id) => all.find((x: ReportCitation) => x.itemId === id)).filter((x): x is ReportCitation => !!x)
     : all.slice(0, 3);
-  const text = [c.lead?.leadParagraph ?? "", c.overview ?? "", ...all.map((i: ReportCitation) => `${i.title}${i.summary ?? ""}`)].join("");
+  const text = [c.lead?.leadParagraph ?? "", c.overview ?? "", ...all.map((i: ReportCitation) => `${i.title}${i.summary ?? ""}${i.latestUpdate?.title??''}${i.latestUpdate?.summary??''}`)].join("");
   // A weekly or monthly's picture comes from its first highlight and is captioned with that story.
-  const leadItem = kind === "daily" ? leadItemOf(c.lead?.title, highlights, all) : (highlights[0] ?? all[0]);
+  const explicitLead=typeof c.leadItemId==='string'?all.find(i=>i.itemId===c.leadItemId&&i.available):undefined;
+  const leadItem = kind === "daily" ? explicitLead??leadItemOf(c.lead?.title, highlights, all) : (highlights[0] ?? all[0]);
   const [{ prev, next }, picture] = await Promise.all([neighbors(kind, key), leadItem?.itemId && leadItem.available ? leadCover(leadItem.itemId) : null]);
   const cover = picture && leadItem ? { ...picture, caption: kind === "daily" ? null : leadItem.title } : null;
   const headline = kind === "daily" ? null : periodicHeadline(c);
@@ -262,6 +268,7 @@ export async function loadReport(kind: ReportKind, key: string): Promise<ReportD
     windowStart: r.window_start.toISOString(),
     windowEnd: r.window_end.toISOString(),
     generatedAt: r.generated_at.toISOString(),
+    editionStatus:c.editionStatus,enrichmentStatus:c.enrichmentStatus,leadItemId:explicitLead?.itemId??null,
     revision: r.revision,
     lead: c.lead ?? (headline ? { title: headline, leadParagraph: String(c.overview ?? "") } : null),
     overview: c.overview ?? null,
@@ -344,7 +351,7 @@ export async function v1Daily(date: string | "latest") {
   if (!r) return null;
   const c = await safeReportContent(r.content);
   const raw = [...(c.sections ?? []).flatMap((s: any) => s.items ?? []), ...(c.flashes ?? [])];
-  const avail = await availability([...new Set(raw.map((i: any) => i.itemId).filter(Boolean))] as string[]);
+  const avail = await availability([...new Set(citations(c).map((i: any) => i.itemId).filter(Boolean))] as string[]);
   const ok = (i: any) => !i.itemId || (avail.get(i.itemId)?.available ?? true);
   const links = (i: any) => ({ aihot: i.itemId ? itemUrl(i.itemId) : null, original: String(i.sourceUrl ?? "") });
   const url = dailyUrl(r.key);
@@ -355,6 +362,7 @@ export async function v1Daily(date: string | "latest") {
       generatedAt: r.generated_at.toISOString(),
       windowStart: r.window_start.toISOString(),
       windowEnd: r.window_end.toISOString(),
+      editionStatus:c.editionStatus,enrichmentStatus:c.enrichmentStatus,leadItemId:typeof c.leadItemId==='string'&&avail.get(c.leadItemId)?.available?c.leadItemId:null,
       links: { aihot: url },
       attribution: attribution(url),
       lead: c.lead ? { title: String(c.lead.title), leadParagraph: String(c.lead.leadParagraph) } : null,
@@ -363,6 +371,8 @@ export async function v1Daily(date: string | "latest") {
         items: (s.items ?? []).filter(ok).map((i: any) => ({
           title: String(i.title),
           summary: String(i.summary ?? ""),
+          editionRole:i.editionRole,updateType:i.updateType,
+          latestUpdate:i.latestUpdate&&ok(i.latestUpdate)?{title:String(i.latestUpdate.title),summary:String(i.latestUpdate.summary??''),source:{name:String(i.latestUpdate.sourceName??'')},links:links(i.latestUpdate)}:null,
           source: { name: String(i.sourceName ?? "") },
           links: links(i),
           attribution: attribution(i.itemId ? itemUrl(i.itemId) : url),

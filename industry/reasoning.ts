@@ -1,6 +1,6 @@
 // Private Info-Hub's official DeepSeek Flash calls only. Other deployments retain their model extras.
 // Output ceilings include thinking and the final answer; these are headroom, not a target token spend.
-export const REASONING_POLICY_VERSION = 'infohub-pi-low-v2';
+export const REASONING_POLICY_VERSION = 'infohub-intelligence-v3';
 export type ReasoningEffort = 'none' | 'low' | 'high';
 export const REASONING_BY_PURPOSE: Readonly<Record<string, ReasoningEffort>> = {
   prefilter_article: 'low',
@@ -15,6 +15,7 @@ export const REASONING_BY_PURPOSE: Readonly<Record<string, ReasoningEffort>> = {
   group_story_review: 'low',
   story_digest: 'low',
   report_lead: 'none',
+  report_curate:'low',
   report_weekly: 'low',
   report_monthly: 'low',
   translate_body: 'none',
@@ -39,6 +40,7 @@ const GUIDANCE: Readonly<Record<string, { softThinkingTokens: number|null; outpu
   group_story_review: { softThinkingTokens:1600, output:'优先核对可能误合并的矛盾与关键差异；理由简短，证据不足仍按原规则拒绝合并。' },
   story_digest: { softThinkingTokens:1000, output:'合并重复事实，仅保留事件主线、关键进展和必要差异；遵守原任务的格式及引用要求。' },
   report_lead: { softThinkingTokens:null, output:'导语直入当天最重要变化，遵守原篇幅要求，不逐条重述正文。' },
+  report_curate:{softThinkingTokens:800,output:'只返回候选ID，核对精选资格、跨领域阅读价值、事件去重与篇数限制，不重写正文。'},
   report_weekly: { softThinkingTokens:2400, output:'按已有资料归纳主线、变化和差异；避免逐条重复报道，不添加无证据趋势。' },
   report_monthly: { softThinkingTokens:3200, output:'按已有资料归纳主线、变化和差异；避免逐条重复报道，不添加无证据趋势。' },
   translate_body: { softThinkingTokens:null, output:'完整翻译正文，保留原有信息、段落与链接；不得为了简短省略或改成摘要，不加译者说明。' },

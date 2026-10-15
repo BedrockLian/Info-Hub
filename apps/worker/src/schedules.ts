@@ -12,6 +12,7 @@ import { computeHotRanking, snapshotHeat } from "@aihot/backend/events/hot";
 import { refreshStoryStatuses } from "@aihot/backend/events/digest";
 import { linkRelatedStories } from "@aihot/backend/events/group";
 import { catchUpReports, composeDaily, composeMonthly, composeWeekly } from "@aihot/backend/reports/compose";
+import {refreshCurrentDaily} from '@aihot/backend/reports/daily';
 import { addDays, beijingDate, isoWeekLabel } from "@aihot/contracts/time";
 import { runLeaderboardRound } from "@aihot/backend/leaderboard/method/run";
 import { refreshLeaderboard } from "@aihot/backend/leaderboard/fetch/refresh";
@@ -44,6 +45,8 @@ export const SCHEDULES: Scheduled[] = [
   { name: "stories.status", cron: "7 * * * *", run: refreshStoryStatuses },
   { name: "stories.links", cron: "12 * * * *", run: linkRelatedStories },
   { name: "reports.daily", cron: "0 8 * * *", missed: "once" as const, run: () => composeDaily(beijingDate(Date.now())) },
+  {name:'reports.refresh',cron:'15 8-21 * * *',run:()=>refreshCurrentDaily()},
+  {name:'reports.finalize',cron:'0 22 * * *',missed:'once',run:()=>refreshCurrentDaily()},
   ...(FEATURES.weeklyReports ? [{ name: "reports.weekly", cron: "0 10 * * 1", missed: "once" as const, run: () => composeWeekly(isoWeekLabel(addDays(beijingDate(Date.now()), -7))) }] : []),
   ...(FEATURES.monthlyReports ? [{
     name: "reports.monthly",

@@ -204,6 +204,10 @@ export interface HotParticipant {
 
 
 export interface HotEntryView {
+  category?:string|null;
+  selected?:boolean;
+  score?:number|null;
+  reasons?:string[];
   rank: number;
   story: StoryRef;
   heat: number;
@@ -230,6 +234,8 @@ export interface HotEntryView {
 }
 
 export interface HotResponse {
+  status?:'ready'|'empty'|'processing'|'stale';
+  pendingCount?:number;
   computedAt: string | null;
   ruleVersion: string | null;
   windowHours: number;
@@ -299,6 +305,9 @@ export interface StoryDetail {
 export type ReportKind = "daily" | "weekly" | "monthly";
 
 export interface ReportCitation {
+  latestUpdate?:ReportCitation|null;
+  editionRole?:'focus'|'brief';
+  updateType?:'new'|'progress'|'late'|'revision';
   itemId: string | null;
   title: string;
   summary: string | null;
@@ -317,6 +326,9 @@ export interface ReportCitation {
 }
 
 export interface ReportDetail {
+  editionStatus?:'updating'|'final';
+  enrichmentStatus?:'pending'|'ready'|'fallback';
+  leadItemId?:string|null;
   kind: ReportKind;
   key: string;
   title: string;

@@ -9,6 +9,7 @@ import { registerEventJobs } from "@aihot/backend/jobs/events";
 import { registerNotifyJobs } from "@aihot/backend/jobs/notify";
 import { registerPublicationJobs } from "@aihot/backend/jobs/publication";
 import { registerSchedules } from "./schedules.ts";
+import {registerReportJobs} from '@aihot/backend/jobs/reports';
 import { ensureContentTargets } from "@aihot/backend/notify/deliver";
 import { startHeartbeat } from "@aihot/backend/operations/heartbeat";
 
@@ -21,6 +22,7 @@ if (process.env.COLLECT_ENABLED !== "false") await registerSourceJobs(boss);
 await registerEventJobs(boss);
 await registerNotifyJobs(boss);
 await registerPublicationJobs(boss);
+await registerReportJobs(boss);
 await registerSchedules(boss);
 // A new site has no leaderboard until the first scheduled round: compute one now.
 if (FEATURES.leaderboard) {

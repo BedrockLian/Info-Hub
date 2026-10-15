@@ -126,13 +126,15 @@ export function dateMark(kind: ReportKind, key: string): { figure: string; top: 
 }
 
 /** When each kind comes out (F10), for the masthead. */
-export const EDITION: Record<ReportKind, string> = { daily: "每天 08:00 出刊", weekly: "每周一出刊", monthly: "每月 1 日出刊" };
+export const EDITION: Record<ReportKind, string> = { daily: "08:00 首版 · 22:00 定稿", weekly: "每周一出刊", monthly: "每月 1 日出刊" };
 
 /** The masthead's figures, in the order a reader wants them; zero model releases is left out. */
 const METRICS: Array<[key: string, unit: string]> = [
-  ["totalEvents", "件大事"],
+  ["totalEvents", "件情报"],
   ["totalStories", "件大事"],
   ["sourcesCount", "个来源"],
+  ["focusCount","条重点"],
+  ["briefCount","条简讯"],
   ["firstPartyEvents", "件一手发布"],
   ["modelsReleased", "个新模型"],
   ["selectedCount", "条精选"],
@@ -165,7 +167,7 @@ export function dateLine(kind: ReportKind, key: string): string {
 }
 
 /** What each kind is, under its nameplate. */
-export const MOTTO: Record<ReportKind, string> = { daily: "人工智能 · 每日要闻", weekly: "人工智能 · 每周综述", monthly: "人工智能 · 每月盘点" };
+export const MOTTO: Record<ReportKind, string> = { daily: "跨领域情报 · 每日要闻", weekly: "跨领域情报 · 每周综述", monthly: "跨领域情报 · 每月盘点" };
 
 export interface PeriodCell {
   key: string | null;

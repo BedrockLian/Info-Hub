@@ -1,10 +1,15 @@
-// Reading the latest published hot ranking. The web shows heat values; machine exits only ranks.
+// Read the latest attention ranking; legacy heat fields remain compatible with older consumers.
 import type { HotParticipant, HotStripEntry } from "@aihot/contracts/site";
 import { sql } from "../db.ts";
 import { config } from '../config.ts';
 import { proxiedImage, proxiedImageSet } from "../media/imgproxy.ts";
 
 export interface HotEntry {
+  category?:string|null;
+  selected?:boolean;
+  score?:number|null;
+  reasons?:string[];
+  summary?:string|null;
   rank: number;
   storyId: number;
   storyPublicId: string;
@@ -56,16 +61,23 @@ async function queryLatestHotRanking(): Promise<HotRanking | null> {
   const [row] = await sql<{ id: number; computed_at: Date; rule_version: string; entries: HotEntry[]; evidence: Record<string, unknown> | null }[]>`
     SELECT id, computed_at, rule_version, entries, evidence FROM hot_rankings WHERE published ORDER BY computed_at DESC LIMIT 1`;
   if (!row) return null;
-  if (config.privateSite && row.entries.length) {
-    const live=await sql<{id:number;title:string;article_id:string;url:string;source_name:string}[]>`
-      SELECT DISTINCT ON (st.id) st.id,st.title,p.article_id,p.url,s.name AS source_name
+  if ((config.privateSite || row.rule_version.startsWith('attention-')) && row.entries.length) {
+    const live=await sql<{id:number;title:string;summary:string;article_id:string;url:string;source_name:string;source_id:string;participant:string;tier:string;category:string|null;selected:boolean;score:number|null;at:Date}[]>`
+      SELECT st.id,p.title,p.summary,p.article_id,p.url,s.name AS source_name,s.id AS source_id,coalesce('group:'||s.signal_group_id,'source:'||s.id) AS participant,s.tier,p.category,p.selected,p.score,coalesce(p.published_at,p.timeline_at) AS at
       FROM stories st JOIN facts f ON f.story_id=st.id JOIN fact_articles fa ON fa.fact_id=f.id
       JOIN publications p ON p.article_id=fa.article_id JOIN sources s ON s.id=p.source_id
       WHERE st.id=ANY(${row.entries.map(e=>e.storyId)}::bigint[]) AND st.merged_into IS NULL
-      AND p.visibility='public' AND p.eligible AND (NOT p.selected OR p.visible_after<=now())
-      ORDER BY st.id,p.first_party DESC,p.timeline_at`;
-    const byId=new Map(live.map(r=>[Number(r.id),r]));
-    row.entries=row.entries.filter(e=>byId.has(e.storyId)).map(e=>{const r=byId.get(e.storyId)!;return {...e,title:r.title,representativeItemId:r.article_id,representativeUrl:r.url,representativeSource:r.source_name};});
+      AND p.visibility='public' AND p.eligible AND NOT p.backfill AND (NOT p.selected OR p.visible_after<=now())
+      AND coalesce(p.published_at,p.timeline_at)>now()-interval '48 hours' AND coalesce(p.published_at,p.timeline_at)<=now()
+      ORDER BY st.id,p.selected DESC,p.score DESC NULLS LAST,coalesce(p.published_at,p.timeline_at) DESC,p.article_id`;
+    const byId=new Map<number,Array<(typeof live)[number]>>();
+    for(const report of live){const items=byId.get(report.id)??[];if(!items.some(e=>e.article_id===report.article_id))items.push(report);byId.set(report.id,items);}
+    row.entries=row.entries.filter(e=>byId.has(e.storyId)).map((e,index)=>{
+      const items=byId.get(e.storyId)!,r=items[0]!,sourceCount=new Set(items.map(i=>i.participant)).size,selected=items.some(i=>i.selected);
+      return {...e,rank:index+1,title:r.title,summary:r.summary,category:r.category,selected,score:r.score,sourceCount,participantCount:sourceCount,reportCount:items.length,sourceNames:[...new Set(items.map(i=>i.source_name))],
+        latestAt:new Date(Math.max(...items.map(i=>i.at.getTime()))).toISOString(),reasons:[...(selected?['已入精选']:[]),...(items.length>1?['有后续报道']:[]),sourceCount>1?'多来源报道':'单一来源'],
+        participants:[...new Map(items.map(i=>[i.participant,{name:i.source_name,kind:'editorial' as const,tier:i.tier}])).values()],representativeItemId:r.article_id,representativeUrl:r.url,representativeSource:r.source_name};
+    });
   }
   return { id: row.id, computedAt: row.computed_at.toISOString(), ruleVersion: row.rule_version, entries: row.entries, coverage: row.evidence };
 }
@@ -129,7 +141,7 @@ export async function rankingExtras(ranking: HotRanking) {
         return person;
       });
     },
-    text: (e: HotEntry) => texts.get(e.storyId) ?? { summary: null, latest: null },
+    text: (e: HotEntry) => {const text=texts.get(e.storyId);return {summary:e.summary??text?.summary??null,latest:text?.latest??null};},
   };
 }
 

@@ -37,7 +37,7 @@ export function HotTopics({ entries }: { entries: HotStripEntry[] }) {
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-hot opacity-40" />
             <span className="relative inline-flex size-2 rounded-full bg-hot" />
           </span>
-          当前热点
+          近期值得关注
         </h2>
         <Link to="/hot" className="group inline-flex items-center gap-1 text-[12.5px] text-ink-3 transition-colors hover:text-accent">
           完整榜单 <IconArrowRight size={13} className="transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -56,8 +56,8 @@ export function HotTopics({ entries }: { entries: HotStripEntry[] }) {
                 <Faces participants={e.participants} total={e.participantCount} size={20} />
               </span>
               <span className="flex items-center justify-end gap-2.5 sm:contents">
-                <span className="whitespace-nowrap text-right text-[12.5px] text-ink-4" title="热度指数">
-                  <span className="num text-[13.5px] font-semibold text-ink-2">{Math.round(e.heat)}</span> 热度
+                <span className="whitespace-nowrap text-right text-[12.5px] text-ink-4" title="本站监测到的独立来源">
+                  {e.participantCount===1?'单一来源':`${e.participantCount}个来源`}
                 </span>
                 <span className="flex w-5 justify-center">
                   <TrendMark trend={e.trend} />

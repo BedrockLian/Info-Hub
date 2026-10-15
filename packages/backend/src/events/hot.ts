@@ -1,13 +1,13 @@
-// Hot ranking: attention over the last 48 hours from independent participants.
-// Each participant counts once per window (repeat collection does not add heat), decays with a
-// 24-hour half-life, and the source time (not collection time) places evidence in the window.
+// Reader attention ranking uses existing editorial judgments and current publications.
+// The legacy decay calculations below remain only for existing event-history charts.
 import { sql } from "../db.ts";
 import { tierRank, type HotEntry } from "./hot-read.ts";
+import {diverseAttention} from './attention-policy.ts';
+import {INTELLIGENCE} from '@aihot/industry/intelligence';
 
-export const HOT_RULE_VERSION = "heat-v1-48h-halflife24h";
+export const HOT_RULE_VERSION = "attention-v2-selected-score-progress-coverage";
 const WINDOW_HOURS = 48;
 const HALF_LIFE_HOURS = 24;
-const MIN_PARTICIPANTS = 2;
 
 interface HeatRow {
   story_id: number;
@@ -89,76 +89,38 @@ export function heatIndex(heat: number): number {
 }
 
 export async function computeHotRanking(at = new Date()): Promise<{ id: number; entries: number }> {
-  const behind = behindSources(await sourceClocks(), at.getTime(), true);
-  const rows = (await heatRows(at, behind)).filter((r) => Number(r.participants) >= MIN_PARTICIPANTS && Number(r.editorial_participants) >= 1);
-  rows.sort((a, b) => Number(b.heat) - Number(a.heat) || (b.latest_at?.getTime() ?? 0) - (a.latest_at?.getTime() ?? 0));
-
-  const entries: HotEntry[] = [];
-  for (const r of rows) {
-    if (entries.length >= 10) break;
-    const reports = await sql<{ id: string; url: string; title: string; source_name: string; first_party: boolean; selected: boolean; score: number | null; at: Date }[]>`
-      SELECT DISTINCT ON (p.article_id) p.article_id AS id, p.url, p.title, s.name AS source_name, p.first_party, p.selected, p.score,
-             coalesce(p.published_at, p.discovered_at) AS at
-      FROM facts f JOIN fact_articles fa ON fa.fact_id = f.id JOIN publications p ON p.article_id = fa.article_id
-      JOIN sources s ON s.id = p.source_id
-      WHERE f.story_id = ${r.story_id} AND p.visibility = 'public' AND p.eligible AND (NOT p.selected OR p.visible_after <= ${at})
-      ORDER BY p.article_id`;
-    if (reports.length === 0) continue;
-    const rep = [...reports].sort((x, y) => Number(y.first_party) - Number(x.first_party) || Number(y.selected) - Number(x.selected) || (Number(y.score ?? 0) - Number(x.score ?? 0)))[0]!;
-    const participants = await sql<{ name: string; kind: "editorial" | "signal"; tier: string; at: Date }[]>`
-      SELECT DISTINCT ON (ss.participant_key) s.name, ss.kind, s.tier, ss.observed_at AS at
-      FROM story_signals ss JOIN sources s ON s.id = ss.source_id
-      WHERE ss.story_id = ${r.story_id} AND ss.observed_at > ${at}::timestamptz - make_interval(hours => ${WINDOW_HOURS}) AND ss.observed_at <= ${at}
-      ORDER BY ss.participant_key, (ss.kind = 'editorial') DESC, ss.observed_at DESC`;
-    // The reporting sources of the window, latest first (signal participants are counted separately).
-    const reporting = participants.filter((p) => p.kind === "editorial").sort((x, y) => y.at.getTime() - x.at.getTime());
-    const heat = heatIndex(Number(r.heat));
-    // The change against six hours before compares only participants whose sources were observed
-    // throughout; with none of the earlier ones observed there is no comparison.
-    const prevAll = heatIndex(Number(r.heat_prev));
-    const [cur, prev] = Number(r.behind_participants) > 0 ? [heatIndex(Number(r.heat_obs)), heatIndex(Number(r.heat_prev_obs))] : [heat, prevAll];
-    const pct = prev > 0 ? (cur - prev) / prev : null;
-    const firstAt = r.first_report_at ?? reports[0]!.at;
-    const isNew = at.getTime() - firstAt.getTime() < 6 * 3600 * 1000;
-    const surge = Number(r.recent6h) >= 3 && Number(r.recent6h) / Number(r.participants) >= 0.5;
-    const badges: HotEntry["badges"] = [];
-    if (surge) badges.push("surge");
-    if (isNew) badges.push("new");
-    if (!surge && pct !== null && pct > 0.15) badges.push("rising");
-    const sourceNames = [...new Set(reporting.map((x) => x.name))].slice(0, 8);
-    entries.push({
-      rank: entries.length + 1,
-      storyId: r.story_id,
-      storyPublicId: r.public_id,
-      title: r.title,
-      heat,
-      trend: prevAll <= 0 ? "new" : pct === null ? "unknown" : pct > 0.1 ? "up" : pct < -0.1 ? "down" : "flat",
-      trendPct: pct === null ? null : Math.round(pct * 1000) / 10,
-      badges,
-      participantCount: Number(r.participants),
-      sourceCount: Number(r.editorial_participants),
-      signalCount: Number(r.signal_participants),
-      reportCount: reports.length,
-      sourceNames,
-      latestAt: (r.latest_at ?? at).toISOString(),
-      firstReportAt: firstAt.toISOString(),
-      representativeItemId: rep.id,
-      representativeUrl: rep.url,
-      representativeSource: rep.source_name,
-      // Faces go to the 精选组 by tier, the most recently active first within a tier (ordered before the cap).
-      participants: participants
-        .sort((x, y) => Number(y.kind === "editorial") - Number(x.kind === "editorial") || tierRank(x.tier) - tierRank(y.tier) || y.at.getTime() - x.at.getTime())
-        .slice(0, 40).map(({ name, kind, tier }) => ({ name, kind, tier })),
-    });
-  }
-  const [row] = await sql<{ id: number }[]>`
-    INSERT INTO hot_rankings (computed_at, rule_version, entries, evidence, published)
-    VALUES (${at}, ${HOT_RULE_VERSION}, ${sql.json(entries as never)},
-            ${sql.json({ windowHours: WINDOW_HOURS, halfLifeHours: HALF_LIFE_HOURS, minParticipants: MIN_PARTICIPANTS, candidates: rows.length } as never)}, true)
-    RETURNING id`;
-  // Keep a bounded history of rankings.
-  await sql`DELETE FROM hot_rankings WHERE computed_at < now() - interval '30 days'`;
-  return { id: row!.id, entries: entries.length };
+  const reports=await sql<{story_id:number;public_id:string;story_title:string;first_report_at:Date|null;article_id:string;title:string;summary:string;source_id:string;source_name:string;participant:string;tier:string;selected:boolean;score:number|null;category:string|null;timeline_at:Date;url:string}[]>`
+    SELECT st.id AS story_id,st.public_id::text,st.title AS story_title,st.first_report_at,p.article_id,p.title,p.summary,
+      s.id AS source_id,s.name AS source_name,coalesce('group:'||s.signal_group_id,'source:'||s.id) AS participant,s.tier,p.selected,p.score,p.category,coalesce(p.published_at,p.timeline_at) AS timeline_at,p.url
+    FROM publications p JOIN stories st ON st.id=p.story_id JOIN sources s ON s.id=p.source_id
+    WHERE st.merged_into IS NULL AND p.visibility='public' AND p.eligible AND NOT p.backfill
+      AND coalesce(p.published_at,p.timeline_at)>${at}::timestamptz-interval '48 hours' AND coalesce(p.published_at,p.timeline_at)<=${at}
+      AND (NOT p.selected OR p.visible_after<=${at})`;
+  const groups=new Map<number,Array<(typeof reports)[number]>>();
+  for(const report of reports){const group=groups.get(report.story_id)??[];group.push(report);groups.set(report.story_id,group);}
+  const candidates=[...groups.entries()].map(([storyId,items])=>{
+    items.sort((a,b)=>Number(b.selected)-Number(a.selected)||(b.score??-Infinity)-(a.score??-Infinity)||Number(b.tier==='T1')-Number(a.tier==='T1')||b.timeline_at.getTime()-a.timeline_at.getTime()||a.article_id.localeCompare(b.article_id));
+    const rep=items[0]!,latestAt=new Date(Math.max(...items.map(r=>r.timeline_at.getTime()))).toISOString();
+    return {id:rep.public_id,storyId,items,rep,selected:items.some(r=>r.selected),score:rep.score,category:rep.category,latestAt,sourceCount:new Set(items.map(r=>r.participant)).size};
+  });
+  const entries:HotEntry[]=diverseAttention(candidates,INTELLIGENCE.hotLimit).map((c,index)=>{
+    const sourceNames=[...new Set(c.items.map(r=>r.source_name))];
+    const participants=[...new Map(c.items.map(r=>[r.participant,{name:r.source_name,kind:'editorial' as const,tier:r.tier}])).values()].sort((a,b)=>tierRank(a.tier)-tierRank(b.tier));
+    const sourceTimes=new Map<string,number>();for(const report of c.items)sourceTimes.set(report.participant,Math.max(sourceTimes.get(report.participant)??0,report.timeline_at.getTime()));
+    return {rank:index+1,storyId:c.storyId,storyPublicId:c.id,title:c.rep.title,summary:c.rep.summary,category:c.category,selected:c.selected,score:c.score,
+      reasons:[...(c.selected?['已入精选']:[]),...(c.items.length>1?['有后续报道']:[]),c.sourceCount>1?'多来源报道':'单一来源'],
+      heat:heatIndex([...sourceTimes.values()].reduce((sum,time)=>sum+Math.pow(0.5,(at.getTime()-time)/86400000),0)),
+      trend:'unknown',trendPct:null,badges:[],participantCount:c.sourceCount,sourceCount:c.sourceCount,signalCount:0,reportCount:c.items.length,sourceNames,
+      latestAt:c.latestAt,firstReportAt:(c.rep.first_report_at??c.rep.timeline_at).toISOString(),representativeItemId:c.rep.article_id,representativeUrl:c.rep.url,representativeSource:c.rep.source_name,participants};
+  });
+  const [pending]=await sql<{n:number}[]>`SELECT count(*)::int AS n FROM articles a LEFT JOIN publications p ON p.article_id=a.id
+    WHERE (a.processing_state IN ('new','blocked') AND a.discovered_at>${at}::timestamptz-interval '48 hours')
+      OR (p.story_id IS NULL AND p.visibility='public' AND p.eligible AND NOT p.backfill AND (NOT p.selected OR p.visible_after<=${at})
+        AND coalesce(p.published_at,p.timeline_at)>${at}::timestamptz-interval '48 hours' AND coalesce(p.published_at,p.timeline_at)<=${at})`;
+  const [row]=await sql<{id:number}[]>`INSERT INTO hot_rankings (computed_at,rule_version,entries,evidence,published)
+    VALUES (${at},${HOT_RULE_VERSION},${sql.json(entries as never)},${sql.json({windowHours:48,candidates:candidates.length,pendingCount:pending?.n??0,rankingMode:'attention'} as never)},true) RETURNING id`;
+  await sql`DELETE FROM hot_rankings WHERE computed_at<now()-interval '30 days'`;
+  return {id:row!.id,entries:entries.length};
 }
 
 /**

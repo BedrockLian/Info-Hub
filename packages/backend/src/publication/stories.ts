@@ -229,7 +229,7 @@ async function queryHotCovers(entries: Array<{ storyId: number; representativeIt
 
 export async function loadHot(): Promise<HotResponse> {
   const ranking = await latestHotRanking();
-  if (!ranking) return { computedAt: null, ruleVersion: null, windowHours: 48, entries: [] };
+  if (!ranking) return { computedAt: null, ruleVersion: null, windowHours: 48, entries: [],status:'processing',pendingCount:0 };
   const at = new Date(ranking.computedAt);
   const [sparks, covers, extras] = await Promise.all([
     sparklines(
@@ -243,11 +243,14 @@ export async function loadHot(): Promise<HotResponse> {
     computedAt: ranking.computedAt,
     ruleVersion: ranking.ruleVersion,
     windowHours: 48,
+    status:Date.now()-at.getTime()>15*60000?'stale':ranking.entries.length?'ready':Number(ranking.coverage?.pendingCount??0)>0?'processing':'empty',
+    pendingCount:Number(ranking.coverage?.pendingCount??0),
     entries: ranking.entries.map((e) => {
       const picture = covers.get(e.storyId);
       const coverUrl = picture ? proxiedImage(picture.url, "full") : null;
       const text = extras.text(e);
       return {
+        category:e.category,selected:e.selected,score:e.score,reasons:e.reasons,
         rank: e.rank,
         story: { publicId: e.storyPublicId, title: e.title },
         heat: e.heat,

@@ -1,3 +1,6 @@
+import {saveReport} from "./store.ts";
+import {composeDailyIntelligence} from "./daily.ts";
+import {refreshRecentDailies} from './daily.ts';
 import { FEATURES } from "@aihot/industry/features";
 // Daily, weekly and monthly reports. Windows are Beijing calendar based and written into the report;
 // missed schedule points are caught up; regeneration creates a revision. The editors' prompts are in
@@ -109,65 +112,7 @@ async function writeLead(kind: string, key: string, entries: ReportEntry[], mode
   return { lead: { title: res.data.title, leadParagraph: res.data.leadParagraph }, highlights, receiptId: res.receiptId };
 }
 
-async function saveReport(kind: "daily" | "weekly" | "monthly", key: string, start: Date, end: Date, content: Record<string, unknown>, reason: string, model: string) {
-  await sql.begin(async (tx) => {
-    const [existing] = await tx<{ id: number; revision: number; content: unknown; generated_at: Date }[]>`
-      SELECT id, revision, content, generated_at FROM reports WHERE kind = ${kind} AND key = ${key} FOR UPDATE`;
-    if (existing) {
-      await tx`INSERT INTO report_revisions (report_id, revision, content, generated_at, reason)
-               VALUES (${existing.id}, ${existing.revision}, ${tx.json(existing.content as never)}, ${existing.generated_at}, ${reason}) ON CONFLICT DO NOTHING`;
-      await tx`UPDATE reports SET content = ${tx.json(content as never)}, window_start = ${start}, window_end = ${end}, generated_at = now(),
-                 model = ${model}, revision = revision + 1, origin = 'model', updated_at = now() WHERE id = ${existing.id}`;
-    } else {
-      await tx`INSERT INTO reports (kind, key, window_start, window_end, content, generated_at, model, origin)
-               VALUES (${kind}, ${key}, ${start}, ${end}, ${tx.json(content as never)}, now(), ${model}, 'model')`;
-    }
-  });
-}
-
-/** Daily report for Beijing date D covers [D-1 08:00, D 08:00) Beijing time. */
-export async function composeDaily(date: string, reason = "scheduled"): Promise<{ key: string; entries: number }> {
-  const end = new Date(beijingMidnight(date).getTime() + 8 * 3600 * 1000);
-  const start = new Date(end.getTime() - 86400000);
-  const covered = await recentlyCovered("daily", date);
-  const all = await candidates(start, end);
-  const fresh = all.filter((c) => !covered.has(c.factKey) && !covered.has(`a:${c.itemId}`));
-  const perSection = new Map<string, Candidate[]>();
-  const flashes: Array<{ itemId: string; title: string; sourceName: string; sourceUrl: string; publishedAt: string }> = [];
-  for (const c of fresh) {
-    const label = SECTION_OF[c.category ?? ""] ?? DEFAULT_SECTION;
-    const list = perSection.get(label) ?? [];
-    if (list.length < 8) list.push(c);
-    else if (flashes.length < 12) flashes.push({ itemId: c.itemId, title: c.title, sourceName: c.sourceName, sourceUrl: c.sourceUrl, publishedAt: c.publishedAt });
-    perSection.set(label, list);
-  }
-  const sections = SECTION_ORDER.filter((l) => perSection.get(l)?.length).map((label) => ({
-    label,
-    items: perSection.get(label)!.map(({ category: _c, factKey: _f, ...entry }) => entry),
-  }));
-  const ordered = sections.flatMap((s) => s.items).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  const model = await modelFor("report");
-  const lead = ordered.length ? await writeLead("daily", date, ordered, model) : null;
-  const content = {
-    date,
-    lead: lead?.lead ?? null,
-    highlights: lead?.highlights ?? [],
-    sections,
-    flashes,
-    metrics: {
-      totalEvents: ordered.length,
-      sourcesCount: new Set(ordered.map((e) => e.sourceId)).size,
-      modelsReleased: perSection.get("模型发布/更新")?.length ?? 0,
-      firstPartyEvents: ordered.filter((e) => e.firstParty).length,
-    },
-    windowStart: start.toISOString(),
-    windowEnd: end.toISOString(),
-    generator: { version: REPORT_VERSION, model, repeatsSuppressed: all.length - fresh.length },
-  };
-  await saveReport("daily", date, start, end, content, reason, model);
-  if (lead) await completeReceipt(sql, lead.receiptId);
-  return { key: date, entries: ordered.length };
-}
+export async function composeDaily(date:string,reason="scheduled"){return composeDailyIntelligence(date,reason);}
 
 export const PeriodSchema = z.object({
   // A headline is asked for, but a missing or unusable one leaves the issue on its generic name.
@@ -256,7 +201,8 @@ export async function catchUpReports(now = new Date(), days = 7): Promise<{ gene
   const bjHour = Number(new Date(now.getTime() + 8 * 3600000).toISOString().slice(11, 13));
   const [first] = await sql<{ key: string | null }[]>`SELECT min(key) AS key FROM reports WHERE kind = 'daily'`;
   const latestDue = bjHour >= 8 ? today : addDays(today, -1);
-  for (let i = days - 1; i >= 0; i--) {
+  if(days>0)await refreshRecentDailies(now,days);
+  for (let i = 0; i < days; i++) {
     if (shutdownSignal.signal.aborted) return { generated }; // the next hourly run continues
     const d = addDays(latestDue, -i);
     if (first?.key && d < first.key) continue;

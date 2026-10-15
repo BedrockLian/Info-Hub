@@ -41,7 +41,7 @@ test('private Flash sends scene-specific effort instead of the conflicting globa
     ['structure_article','none',512],['summarize_article','none',512],
     ['group_article','low',4096],['group_signal','low',4096],['group_story','low',4096],
     ['group_review','low',4096],['group_story_review','low',4096],['story_digest','low',4096],
-    ['report_lead','none',512],['report_weekly','low',4096],['report_monthly','low',4096],
+    ['report_lead','none',512],['report_curate','low',4096],['report_weekly','low',4096],['report_monthly','low',4096],
     ['translate_body','none',512],['translate_quoted','none',512],['monitor.recognize','low',4096],
   ];
   for(const [purpose,effort,tokens] of scenes){
@@ -54,7 +54,7 @@ test('private Flash sends scene-specific effort instead of the conflicting globa
     const [row]=await sql`SELECT request FROM receipts WHERE id=${result.receiptId}`;
     assert.equal(row!.request.reasoningEffort,effort);
     assert.equal(row!.request.maxTokens,tokens);
-    assert.equal(row!.request.reasoningPolicy,'infohub-pi-low-v2');
+    assert.equal(row!.request.reasoningPolicy,'infohub-intelligence-v3');
     assert.equal(row!.request.runtime,'pi-agent-core');
     assert.equal(row!.request.instructionPolicy,'infohub-concise-v1');
     assert.match(sent.messages[0].content,/执行篇幅约束/);
