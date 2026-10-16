@@ -10,9 +10,15 @@ import { closeDb, sql } from "@aihot/backend/db";
 import { stopBoss } from "@aihot/backend/jobs/queue";
 import { extractArticleBody, readable } from "@aihot/backend/content/extract";
 import { collectSource } from "@aihot/backend/sources/collect";
-import { updateSource } from "@aihot/backend/admin/sources";
+import { updateSource, sourceIdentity } from "@aihot/backend/admin/sources";
 
 const T = tag();
+test("RSSHub source identity ignores query ordering and keeps distinct routes separate", () => {
+  const a = sourceIdentity("rss", { rsshubRoute: "/news/one?limit=10&filter=test" });
+  assert.equal(a, sourceIdentity("rss", { rsshubRoute: "/news/one?filter=test&limit=10" }));
+  assert.notEqual(a, sourceIdentity("rss", { rsshubRoute: "/news/two?filter=test&limit=10" }));
+  assert.notEqual(a, sourceIdentity("rss", { feedUrl: "https://example.org/news/one?filter=test&limit=10" }));
+});
 const LONG = `${"A card label that swallowed the summary of the article it links to, ".repeat(2)}${T}`;
 let jinaDetailReads = 0;
 let jinaListingReads = 0;

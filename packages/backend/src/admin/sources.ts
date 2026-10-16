@@ -7,6 +7,7 @@ import { republishKey } from "../jobs/publication.ts";
 import { normalizeUrl } from "../lib/url.ts";
 import { fetchJsonList } from "../sources/json-list.ts";
 import { fetchRss } from "../sources/rss.ts";
+import { rsshubRoute } from "../sources/rsshub.ts";
 import { assertSupportedConfig } from "../sources/config-keys.ts";
 import type { SourceRow } from "../sources/types.ts";
 import { fetchWebList } from "../sources/web-list.ts";
@@ -148,6 +149,7 @@ const CreateSchema = z
 
 /** The address a source collects from, used to find duplicates before creating one. */
 export function sourceIdentity(kind: string, config: Record<string, unknown>): string | null {
+  if (kind === "rss" && config.rsshubRoute !== undefined) return `rsshub:${rsshubRoute(config.rsshubRoute)}`;
   const raw = (config.feedUrl ?? config.url ?? config.listUrl ?? config.endpoint ?? null) as string | null;
   if (kind === "x_search") {
     const m = /from:([A-Za-z0-9_]{1,15})/.exec(String(config.query ?? ""));

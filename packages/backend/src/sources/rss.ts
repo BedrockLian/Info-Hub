@@ -6,6 +6,7 @@ import { sanitizeBody } from "../content/sanitize.ts";
 import { identityKeyForUrl } from "../lib/url.ts";
 import { sha256, stableJson } from "../lib/ids.ts";
 import { FetchError, type Candidate, type SourceRow } from "./types.ts";
+import { rsshubFeedUrl } from "./rsshub.ts";
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -112,18 +113,21 @@ export interface RssRead {
 }
 
 export async function fetchRss(source: SourceRow, opts: { force?: boolean } = {}): Promise<RssRead> {
-  const url = String(source.config.feedUrl ?? "");
+  const viaRsshub = source.config.rsshubRoute !== undefined;
+  if (viaRsshub && source.config.feedUrl !== undefined) throw new FetchError("RSSHub rsshubRoute and feedUrl are mutually exclusive");
+  const url = viaRsshub ? rsshubFeedUrl(source.config.rsshubRoute) : String(source.config.feedUrl ?? "");
   if (!url) throw new FetchError("feedUrl missing");
   // Config changes can alter parsing/filtering even when the upstream bytes did not change.
-  const configHash = sha256(stableJson(source.config));
+  const configHash = sha256(stableJson({ ...source.config, ...(viaRsshub ? { rsshubOrigin: new URL(url).origin } : {}) }));
   const previous = !opts.force && source.cursor?.rss?.configHash === configHash ? source.cursor.rss as RssValidator : null;
   const headers: Record<string, string> = { accept: "application/rss+xml, application/atom+xml, application/xml;q=0.9, */*;q=0.8" };
   if (previous?.etag) headers["if-none-match"] = previous.etag;
   if (previous?.lastModified) headers["if-modified-since"] = previous.lastModified;
-  let res = await guardedFetch(url, { headers, timeoutMs: 25_000 });
+  const readOptions = { timeoutMs: 25_000, ...(viaRsshub ? { service: "rsshub" as const, maxBytes: 2 * 1024 * 1024 } : {}) };
+  let res = await guardedFetch(url, { ...readOptions, headers });
   // A redirect may have changed destinations, whose ETag namespace is unrelated to the old one.
   if (res.status === 304 && previous && res.url !== previous.responseUrl) {
-    res = await guardedFetch(url, { headers: { accept: headers.accept! }, timeoutMs: 25_000 });
+    res = await guardedFetch(url, { ...readOptions, headers: { accept: headers.accept! } });
   }
   const validator: RssValidator = {
     configHash, responseUrl: res.url,

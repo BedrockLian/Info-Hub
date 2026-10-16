@@ -27,11 +27,14 @@ interface Preview {
 export default function NewSource() {
   const navigate = useNavigate();
   const { run, pending } = useAdminAction();
-  const [form, setForm] = useState({ id: "", name: "", kind: "rss", tier: "T2", participation_mode: "editorial", interval_minutes: 30, first_party: false, site_fulltext: true, syndicate_fulltext: false, tags: "" });
+  const [form, setForm] = useState({ id: "", name: "", kind: "rss", tier: "T2", participation_mode: "editorial", interval_minutes: 30, first_party: false, site_fulltext: false, syndicate_fulltext: false, tags: "" });
   const [config, setConfig] = useState(JSON.stringify(TEMPLATES.rss, null, 2));
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [duplicate, setDuplicate] = useState<{ id: string; name: string } | null>(null);
+  let rssConfig: Record<string, unknown> = {};
+  try { rssConfig = JSON.parse(config); } catch { /* The JSON editor shows its validation on submit. */ }
+  const viaRsshub = rssConfig?.rsshubRoute !== undefined;
 
   const parsed = () => {
     try {
@@ -96,6 +99,25 @@ export default function NewSource() {
             </div>
           </div>
           <div className="mt-4">
+            {form.kind === "rss" && (
+              <div className="mb-4 grid gap-4 sm:grid-cols-2">
+                <Field label="获取方式">
+                  <Select aria-label="获取方式" value={viaRsshub ? "rsshub" : "native"} onChange={(e) => {
+                    setConfig(JSON.stringify(e.target.value === "rsshub" ? { rsshubRoute: "/github/issue/DIYgod/RSSHub" } : TEMPLATES.rss, null, 2));
+                    setPreview(null);
+                  }}>
+                    <option value="native">原生 RSS / Atom</option>
+                    <option value="rsshub">本站 RSSHub</option>
+                  </Select>
+                </Field>
+                {viaRsshub && <Field label="RSSHub 路由" hint="只填 / 开头的路由；先预览，确认内容和日期再创建。">
+                  <Input aria-label="RSSHub 路由" value={String(rssConfig.rsshubRoute ?? "")} placeholder="/github/issue/DIYgod/RSSHub" onChange={(e) => {
+                    setConfig(JSON.stringify({ ...rssConfig, rsshubRoute: e.target.value }, null, 2));
+                    setPreview(null);
+                  }} />
+                </Field>}
+              </div>
+            )}
             <Field label="采集配置（JSON）">
               <Textarea className="font-mono !text-[12px]" rows={10} value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} />
             </Field>

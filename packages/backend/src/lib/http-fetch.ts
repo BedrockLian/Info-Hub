@@ -18,6 +18,7 @@ export type EgressRoute = "egress" | "direct";
 
 let proxyAgent: ProxyAgent | null = null;
 let directAgent: Agent | null = null;
+let rsshubAgent: Agent | null = null;
 
 function proxied(url: URL, route: EgressRoute): boolean {
   if (route !== "egress" || !config.egressProxyUrl) return false;
@@ -46,6 +47,8 @@ export interface GuardedFetchOptions {
   maxRedirects?: number;
   /** "egress" by default; see EgressRoute. */
   route?: EgressRoute;
+  /** Only the RSS feed adapter uses this capability; every hop must match the configured origin. */
+  service?: "rsshub";
 }
 
 export interface GuardedResponse {
@@ -64,9 +67,18 @@ export async function guardedFetch(input: string, opts: GuardedFetchOptions = {}
   // nominal 20 s image request to occupy the API for minutes.
   const signal = AbortSignal.timeout(opts.timeoutMs ?? 20_000);
   const route = opts.route ?? "egress";
-  const check = (target: string) => withinDeadline(
-    assertPublicUrl(target, config.allowPrivateNetworkFetch, proxied(new URL(target), route)), signal,
-  );
+  const check = async (target: string): Promise<URL> => {
+    if (opts.service === "rsshub") {
+      const origin = config.rsshubBaseUrl ? new URL(config.rsshubBaseUrl) : null;
+      const url = new URL(target);
+      if (!origin || !["http:", "https:"].includes(origin.protocol) || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash || url.origin !== origin.origin || url.username || url.password) {
+        throw new Error("RSSHub request must stay on its configured origin");
+      }
+      signal.throwIfAborted();
+      return url;
+    }
+    return withinDeadline(assertPublicUrl(target, config.allowPrivateNetworkFetch, proxied(new URL(target), route)), signal);
+  };
   let url = await check(input);
   const maxRedirects = opts.maxRedirects ?? 5;
   const maxBytes = opts.maxBytes ?? 8 * 1024 * 1024;
@@ -76,7 +88,7 @@ export async function guardedFetch(input: string, opts: GuardedFetchOptions = {}
       headers: { "user-agent": DEFAULT_UA, "accept-language": "zh-CN,zh;q=0.9,en;q=0.8", ...(opts.headers ?? {}) },
       body: opts.body,
       redirect: "manual",
-      dispatcher: dispatcherFor(proxied(url, route)),
+      dispatcher: opts.service === "rsshub" ? (rsshubAgent ??= new Agent({ connections: 2, pipelining: 1 })) : dispatcherFor(proxied(url, route)),
       signal,
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {

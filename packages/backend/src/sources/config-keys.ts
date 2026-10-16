@@ -2,12 +2,13 @@
 // know would otherwise fall back silently to the generic parse (menus and sentence fragments as
 // articles, dates never found).
 import type { SourceRow } from "./types.ts";
+import { rsshubRoute } from "./rsshub.ts";
 
 // Rules applied in collect.ts to every kind read through collectSource.
 const COLLECTED = ["_aihot", "allowUrlPrefixes", "denyUrlPrefixes", "ingestNoiseFilter", "itemUrlPrefixRewrite", "sortByPublishedAt", "detail", "fetchPublicContent"];
 
 const KEYS: Record<SourceRow["kind"], string[]> = {
-  rss: [...COLLECTED, "feedUrl", "summaryIsBody", "preserveUrlFragment", "allowCategories", "denyCategories"],
+  rss: [...COLLECTED, "feedUrl", "rsshubRoute", "summaryIsBody", "preserveUrlFragment", "allowCategories", "denyCategories"],
   web_list: [
     ...COLLECTED, "url", "baseUrl", "parseMode", "adapter", "cacheToleranceSeconds", "linksStartLine", "preserveUrlFragment",
     "itemSelector", "linkSelector", "titleSelector", "publishedAtSelector", "publishedAtRegex", "publishedAtUtcOffset",
@@ -63,4 +64,9 @@ export class UnsupportedConfig extends Error {
 export function assertSupportedConfig(kind: SourceRow["kind"], config: Record<string, unknown>): void {
   const bad = unsupportedConfig(kind, config);
   if (bad.length) throw new UnsupportedConfig(`不支持的配置项：${bad.join("、")}`);
+  if (kind === "rss" && config.rsshubRoute !== undefined) {
+    if (config.feedUrl !== undefined) throw new UnsupportedConfig("rsshubRoute 与 feedUrl 只能填写一个");
+    try { rsshubRoute(config.rsshubRoute); }
+    catch (error) { throw new UnsupportedConfig(String(error)); }
+  }
 }

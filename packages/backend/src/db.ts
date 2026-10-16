@@ -12,7 +12,7 @@ const numberType = (oid: number) => ({
 export const sql = postgres(config.databaseUrl, {
   max: Number(process.env.DATABASE_POOL_MAX || 10),
   // Keep connections through quiet minutes: a reconnect costs a SCRAM exchange on the next request.
-  idle_timeout: 600,
+  idle_timeout: Number(process.env.DATABASE_IDLE_TIMEOUT || 600),
   connect_timeout: 10,
   onnotice: () => {},
   // Prepared statements keep PostgreSQL's plan cache: planning a detail read took longer than running

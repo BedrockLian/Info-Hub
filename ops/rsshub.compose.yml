@@ -1,0 +1,43 @@
+# Merge with docker-compose.yml. RSSHUB_IMAGE must be pinned to a reviewed digest in production.
+services:
+  rsshub:
+    image: ${RSSHUB_IMAGE:?Set a pinned RSSHub image digest}
+    restart: unless-stopped
+    mem_limit: 384m
+    memswap_limit: 384m
+    cpus: 0.5
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=256
+      CACHE_TYPE: memory
+      MEMORY_MAX: '32'
+      CACHE_EXPIRE: '1800'
+      CACHE_CONTENT_EXPIRE: '3600'
+      REQUEST_TIMEOUT: '8000'
+      REQUEST_RETRY: '1'
+      NO_LOGFILES: 'true'
+      DEBUG_INFO: 'false'
+    # No host port or public proxy: reached only through the application's internal network.
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', '--max-time', '5', 'http://localhost:1200/healthz']
+      interval: 30s
+      timeout: 6s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: {max-size: '5m', max-file: '2'}
+  api:
+    environment:
+      RSSHUB_BASE_URL: http://rsshub:1200
+      DATABASE_POOL_MAX: '4'
+      DATABASE_IDLE_TIMEOUT: '120'
+  worker:
+    environment:
+      RSSHUB_BASE_URL: http://rsshub:1200
+      DATABASE_POOL_MAX: '4'
+      DATABASE_IDLE_TIMEOUT: '120'
+      FETCH_CONCURRENCY: '2'

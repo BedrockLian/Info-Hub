@@ -187,7 +187,7 @@ export default function SourceDetail({ loaderData }: Route.ComponentProps) {
               ))}
             </ul>
           ) : (
-            <Empty>没有抓到条目。检查地址、选择器或登录要求。</Empty>
+            <Empty>没有抓到条目。检查地址、选择器或登录要求；RSSHub 路由也可能需要浏览器或登录凭据。</Empty>
           )}
         </Card>
       )}
@@ -235,7 +235,7 @@ export default function SourceDetail({ loaderData }: Route.ComponentProps) {
               </div>
             </div>
             <div className="mt-4">
-              <Field label="采集配置（JSON）">
+              <Field label="采集配置（JSON）" hint={s.kind === "rss" ? '原生RSS填feedUrl；本站RSSHub填rsshubRoute（/开头的路由），两者只能选一个。' : undefined}>
                 <Textarea className="font-mono !text-[12px]" rows={Math.min(18, draft.config.split("\n").length + 1)} value={draft.config} onChange={(e) => setDraft({ ...draft, config: e.target.value })} spellCheck={false} />
               </Field>
               {configError && <div className="mt-1 text-[12.5px] text-hot">{configError}</div>}
