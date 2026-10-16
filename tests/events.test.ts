@@ -28,16 +28,17 @@ let relation: Rel = "SAME_OCCURRENCE";
 let pairRelation: Rel | null = null;
 /** Answer every candidate of a batch prompt, not only the first. */
 let answerAll = false;
+let invalidDecision = false;
 const provider = await stub(async (_hit, req) => {
   asked.open();
   await hold.promise;
   const body = JSON.parse(req.body) as { messages: Array<{ content: string }> };
   const user = body.messages[1]!.content;
   const pair = user.includes("报道 A");
-  const ids = answerAll ? [...user.matchAll(/【候选 (C\d+)】/g)].map((m) => m[1]!) : ["C1"];
+  const ids = [...user.matchAll(/【候选 (C\d+)】/g)].map((m) => m[1]!);
   const answer = pair
     ? { a: "发布", b: "发布", relation: pairRelation ?? relation, difference: "", confidence: 0.95 }
-    : { query: "发布新模型", decisions: ids.map((id) => ({ id, relation, confidence: 0.95, note: "" })) };
+    : { query: "发布新模型", decisions: ids.map((id,i) => ({ id:invalidDecision?'C999':id, relation:i===0||answerAll?relation:'UNRELATED', confidence: 0.95, note: "" })) };
   return { id: "stub", choices: [{ message: { content: JSON.stringify(answer) } }], usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 } };
 });
 process.env.DEEPSEEK_BASE_URL = `${provider.url}/v1`;
@@ -112,6 +113,18 @@ test("a report joins the fact the model names, and a revision keeps that members
   assert.deepEqual(memberships.map((m) => Number(m.fact_id)), [factId]);
   const [publication] = await sql<{ fact_id: number | null; story_id: number | null }[]>`SELECT fact_id, story_id FROM publications WHERE article_id = ${id}`;
   assert.deepEqual({ fact_id: Number(publication!.fact_id), story_id: Number(publication!.story_id) }, { fact_id: factId, story_id: storyId });
+});
+
+test("an invalid AI candidate reference leaves the report readable and a valid retry can organize it", async () => {
+  hold = gate(); hold.open();
+  const text = randomText(); await storyWithRoot(text, 'invalid-ref-root');
+  const id = await report('invalid-ref-report', text, text);
+  invalidDecision = true;
+  try { await assert.rejects(groupArticle(id), /unusable output/); }
+  finally { invalidDecision = false; }
+  assert.equal((await sql`SELECT fact_id FROM fact_articles WHERE article_id=${id}`).length, 0);
+  assert.equal((await sql`SELECT visibility FROM publications WHERE article_id=${id}`)[0]!.visibility, 'public');
+  assert.equal((await groupArticle(id)).verdict, 'same-fact');
 });
 
 test("an explicit regroup drops the automatic membership and decides again", async () => {

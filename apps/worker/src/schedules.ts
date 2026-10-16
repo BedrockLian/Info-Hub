@@ -10,6 +10,7 @@ import { scheduleMpReconcile } from "@aihot/backend/sources/mp";
 import { refreshSourceIcons } from "@aihot/backend/sources/icons";
 import { computeHotRanking, snapshotHeat } from "@aihot/backend/events/hot";
 import { refreshStoryStatuses } from "@aihot/backend/events/digest";
+import { sweepEventWork } from "@aihot/backend/events/maintenance";
 import { linkRelatedStories } from "@aihot/backend/events/group";
 import { catchUpReports, composeDaily, composeMonthly, composeWeekly } from "@aihot/backend/reports/compose";
 import {refreshCurrentDaily} from '@aihot/backend/reports/daily';
@@ -38,6 +39,7 @@ const collecting = process.env.COLLECT_ENABLED !== "false";
 
 export const SCHEDULES: Scheduled[] = [
   { name: "content.sweep", cron: "*/5 * * * *", run: sweepUnprocessed },
+  { name: "events.sweep", cron: "*/5 * * * *", run: sweepEventWork },
   // Full-text translations of newly selected items (model calls; off with MODEL_CALLS_ENABLED=false).
   ...(FEATURES.fulltextTranslation ? [{ name: "content.translate", cron: "*/5 * * * *", run: () => translatePending() }] : []),
   { name: "hot.rank", cron: "*/5 * * * *", run: () => computeHotRanking() },

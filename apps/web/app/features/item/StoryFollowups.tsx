@@ -11,21 +11,24 @@ import { relativeTime, shortSourceName } from "../../lib/format";
 export function StoryFollowups({ story, currentId }: { story: StoryRef; currentId: string }) {
   const [items, setItems] = useState<StoryFollowup[] | null>(null);
   const [more, setMore] = useState(false);
+  const [failed,setFailed]=useState(false);
   const anchor = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const controller = new AbortController();
     let started = false;
     setItems(null);
+    setFailed(false);
     const load = () => {
       if (started) return;
       started = true;
       fetch(`/api/site/stories/${encodeURIComponent(story.publicId)}/followups`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : null))
         .then((body: StoryFollowupsResponse | null) => {
-          if (!body || controller.signal.aborted) return;
+          if (controller.signal.aborted) return;
+          if (!body) {setFailed(true);return;}
           setItems(body.items.filter((d) => d.representative.id !== currentId));
           setMore(body.more);
-        }).catch(() => {});
+        }).catch(() => {if(!controller.signal.aborted)setFailed(true);});
     };
     const observer = typeof IntersectionObserver === "undefined" ? null : new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) { observer?.disconnect(); load(); }
@@ -36,19 +39,20 @@ export function StoryFollowups({ story, currentId }: { story: StoryRef; currentI
   }, [story.publicId, currentId]);
   return <div ref={anchor}>
     <noscript><a href={`/story/${story.publicId}`}>查看事件全部后续</a></noscript>
-    {items && items.length > 0 && <Followups items={items} more={more} story={story} />}
+    <Followups items={items??[]} more={more} story={story} pending={items===null&&!failed} failed={failed} />
   </div>;
 }
 
-function Followups({items, more, story}: {items: StoryFollowup[]; more: boolean; story: StoryRef}) {
+function Followups({items, more, story, pending, failed}: {items: StoryFollowup[]; more: boolean; story: StoryRef; pending:boolean; failed:boolean}) {
   return (
     <section className="mt-10 border-t border-line pt-5">
       <div className="mb-2 flex items-center justify-between">
         <h2 className="text-[14px] font-semibold text-ink">
-          事件后续 <span className="num font-normal text-ink-4">· {items.length}{more ? "+" : ""}</span>
+          事件脉络 {items.length>0 && <span className="num font-normal text-ink-4">· {items.length}{more ? "+" : ""}</span>}
         </h2>
         <MoreLink to={`/story/${story.publicId}`}>查看事件全部</MoreLink>
       </div>
+      {items.length===0 && <p role="status" className="py-2 text-[13px] leading-relaxed text-ink-4">{failed?'相关报道暂未读取成功，可打开完整事件页。':pending?'正在读取相关报道…':'当前报道已归入此事件，可查看概览及全部来源。'}</p>}
       <ul className="divide-y divide-line-soft">
         {items.map((d) => (
           <li key={d.factId}>

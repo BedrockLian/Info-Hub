@@ -269,6 +269,11 @@ export interface StoryFactView {
 }
 
 export interface StoryDetail {
+  category?: string | null;
+  attentionReasons?: string[];
+  organizationStatus?: 'pending' | 'ready' | 'stale';
+  digestSources?: StoryReportView[];
+  latestItemId?: string | null;
   publicId: string;
   title: string;
   status: "active" | "watching" | "settled";

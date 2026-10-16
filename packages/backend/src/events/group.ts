@@ -27,6 +27,7 @@ import { mergeStoryInto } from "./merge.ts";
 import {
   BATCH_SYSTEM, BatchSchema, PAIR_SYSTEM, PairSchema, RELATE_PROMPT_VERSION, SIGNAL_SYSTEM, STORY_REVIEW_MIN_CONFIDENCE, SignalSchema, TIE_MIN_CONFIDENCE,
   batchUser, firmlyTied, lexicalSimilarity, looksLikeRoundup, pairUser, reportText, sameOccurrence, signalTarget, storyForDevelopment, verdictsByFact,
+  candidateKey,
   type CandidateView, type Relation, type ReportView, type Verdict,
 } from "./relate.ts";
 
@@ -58,6 +59,7 @@ interface ArticleRow {
   participation_mode: string;
   regroup_pending: boolean;
   backfill: boolean;
+  enabled: boolean;
 }
 
 interface PoolRow {
@@ -277,9 +279,11 @@ async function candidateViews(recalled: Recalled[]): Promise<CandidateView[]> {
 // ---------------------------------------------------------------------------
 
 async function judgeBatch(articleId: string, query: ReportView, cands: CandidateView[]): Promise<{ verdicts: Map<number, Verdict>; receiptId: number }> {
+  const keys=new Set(cands.map((_c,index)=>candidateKey(index)));
+  const schema=BatchSchema.refine(value=>value.decisions.length===keys.size && new Set(value.decisions.map(d=>d.id)).size===keys.size && value.decisions.every(d=>keys.has(d.id)),'Every candidate must have exactly one decision');
   const res = await chatJson({
     model: await modelFor("group"), purpose: "group_article", subject: `article:${articleId}`, promptVersion: RELATE_PROMPT_VERSION,
-    system: BATCH_SYSTEM, user: batchUser(query, cands), schema: BatchSchema, temperature: 0, maxTokens: 200 + 90 * cands.length,
+    system: BATCH_SYSTEM, user: batchUser(query, cands), schema, temperature: 0, maxTokens: 200 + 90 * cands.length,
   });
   return { verdicts: verdictsByFact(res.data.decisions, cands), receiptId: res.receiptId };
 }
@@ -605,10 +609,11 @@ export async function groupArticle(articleId: string, opts: GroupOptions = {}): 
 async function decide(articleId: string, opts: GroupOptions): Promise<GroupResult> {
   const [a] = await sql<ArticleRow[]>`
     SELECT a.id, a.title, a.url, a.published_at, a.discovered_at, a.grouped_at, a.body_text, a.x_post, a.backfill,
-           s.id AS source_id, s.name AS source_name, s.signal_group_id, s.first_party, s.participation_mode,
+           s.id AS source_id, s.name AS source_name, s.signal_group_id, s.first_party, s.participation_mode, s.enabled,
            EXISTS (SELECT 1 FROM regroup_pending rp WHERE rp.article_id = a.id) AS regroup_pending
     FROM articles a JOIN sources s ON s.id = a.source_id WHERE a.id = ${articleId}`;
   if (!a) return { verdict: "skipped" };
+  if (!a.enabled && !opts.force) return { verdict: "skipped" };
   const observedAt = a.published_at ?? a.discovered_at;
   const source = { id: a.source_id, signal_group_id: a.signal_group_id };
 

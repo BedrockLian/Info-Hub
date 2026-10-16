@@ -4,6 +4,9 @@ import {request as httpRequest} from 'node:http';
 import {request as httpsRequest} from 'node:https';
 const arg=process.argv.indexOf('--base');
 const base=(arg>=0?process.argv[arg+1]:'http://127.0.0.1:18082')!;
+const storyArg=process.argv.indexOf('--story');
+const storyId=storyArg>=0?process.argv[storyArg+1]:null;
+if(storyArg>=0)assert.match(storyId??'',/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,'--story requires a public event UUID');
 const password=process.env.ADMIN_PASSWORD;
 assert.ok(password && password.length>=12,'ADMIN_PASSWORD must be supplied to the smoke process');
 const call=(path:string,init:RequestInit={})=>fetch(base+path,{redirect:'manual',signal:AbortSignal.timeout(15000),...init});
@@ -16,6 +19,7 @@ const mcpCall=(headers:Record<string,string>,body:string)=>new Promise<number>((
  req.on('error',reject);req.end(body);
 });
 for(const path of ['/','/all','/starred','/daily'])assert.equal((await call(path)).status,302,path);
+if(storyId){assert.equal((await call(`/story/${storyId}`)).status,302);assert.equal((await call(`/story/${storyId}.data`)).status,401);}
 for(const path of ['/all.data','/feed.xml','/api/v1/items','/api/mcp','/api/site/contact','/api/admin/read-tokens']) {
  const res=await call(path);assert.equal(res.status,401,path);assert.match(res.headers.get('cache-control')!,/no-store/);
 }
@@ -31,6 +35,9 @@ const {token,id}=await created.json() as {token:string;id:string};
 try {
  const bearer={authorization:`Bearer ${token}`};
  for(const path of ['/all','/all.data','/feed.xml','/api/v1/items']) {const res=await call(path,{headers:bearer});assert.equal(res.status,200,path);assert.equal(res.headers.get('cache-control'),'private, no-store');}
+ if(storyId)for(const credentials of [bearer,{cookie}])for(const path of [`/story/${storyId}`,`/story/${storyId}.data`,`/api/site/stories/${storyId}`]){
+  const res=await call(path,{headers:credentials});assert.equal(res.status,200,path);assert.equal(res.headers.get('cache-control'),'private, no-store');
+ }
  assert.equal((await call('/api/admin/me',{headers:bearer})).status,401);
  const mcp=await mcpCall({...bearer,host:new URL(process.env.SITE_URL ?? base).host,accept:'application/json, text/event-stream','content-type':'application/json'},JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'infohub-smoke',version:'1'}}}));
  assert.equal(mcp,200,'authenticated MCP initialize');

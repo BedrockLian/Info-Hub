@@ -17,11 +17,16 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiGet<T>(path: string, init?: { signal?: AbortSignal; headers?: Record<string, string>; responseHeaders?: Headers }): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+export async function apiFetch(path: string, init?: { signal?: AbortSignal; headers?: Record<string, string>; redirect?: RequestRedirect }): Promise<Response> {
+  return fetch(`${API_BASE}${path}`, {
     headers: { accept: "application/json", "x-aihot-ssr": "1", ...(privateSite ? requestContext.getStore()?.headers : {}), ...init?.headers },
     signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
+    redirect: init?.redirect,
   });
+}
+
+export async function apiGet<T>(path: string, init?: { signal?: AbortSignal; headers?: Record<string, string>; responseHeaders?: Headers }): Promise<T> {
+  const res = await apiFetch(path, init);
   if (!res.ok) {
     let code: string | null = null;
     try {

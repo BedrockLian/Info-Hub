@@ -8,14 +8,18 @@ let web: ChildProcess, origin: string, logs='';
 const seen: string[]=[];
 const api=createServer(async (req,res)=>{
   const cookie=req.headers.cookie ?? '';
+  const bearer=req.headers.authorization==='Bearer readonly-test';
   const url=new URL(req.url!, 'http://api.local');
-  if(url.pathname==='/api/auth/read-check') {res.writeHead(cookie==='infohub_session=A'||cookie==='infohub_session=B'?204:401);return res.end();}
+  if(url.pathname==='/api/auth/read-check') {res.writeHead(cookie==='infohub_session=A'||cookie==='infohub_session=B'||bearer?204:401);return res.end();}
   seen.push(cookie);
+  if(url.pathname.startsWith('/api/site/stories/') && !cookie && !bearer) {res.writeHead(401);return res.end(JSON.stringify({code:'unauthorized'}));}
   await new Promise(resolve=>setTimeout(resolve,cookie.endsWith('A')?30:5));
   res.setHeader('Content-Type','application/json');
   if(url.pathname==='/api/site/meta') return res.end(JSON.stringify({changelogVersion:'test'}));
   if(url.pathname==='/api/site/pool') return res.end(JSON.stringify({filters:{channel:'all',category:null,tag:null,topic:null,q:null,tab:'time'},items:[],page:1,pageCount:1,total:0,todayCount:0,freshness:'2026-10-10T00:00:00Z',generatedAt:'2026-10-10T00:00:00Z'}));
   if(url.pathname==='/api/site/hot') return res.end(JSON.stringify({entries:[]}));
+  if(url.pathname==='/api/site/stories/merged') {res.writeHead(308);return res.end(JSON.stringify({mergedInto:'surviving'}));}
+  if(url.pathname==='/api/site/stories/surviving') return res.end(JSON.stringify({publicId:'surviving',title:'跨来源事件',status:'active',reportCount:0,sourceCount:0,firstReportAt:null,latestAt:null,digest:null,digestUpdatedAt:null,summary:null,excerpt:null,latest:null,whyHot:{participants48h:0,newParticipants6h:0,recentReports24h:0,observationComplete:true,rank:null,heat:null},developments:[],officialReports:[],timeline:[],heat:[],related:[]}));
   res.writeHead(404);res.end(JSON.stringify({code:'not_found'}));
 });
 before(async()=>{
@@ -40,4 +44,16 @@ test('concurrent authenticated SSR forwards only each request credentials and ca
  assert.equal((await fetch(origin+'/all',{redirect:'manual'})).status,302);
  assert.equal((await fetch(origin+'/all.data',{headers:{cookie:'infohub_session=A'}})).status,200);
  const login=await fetch(origin+'/admin/login?return=%2Fall');assert.equal(login.status,200);
+});
+
+test('private event HTML, data navigation and merged URLs keep the visitor credentials',async()=>{
+ for(const path of ['/story/surviving','/story/surviving.data']) {
+  const res=await fetch(origin+path,{headers:{cookie:'infohub_session=A'}});
+  assert.equal(res.status,200,path);assert.equal(res.headers.get('cache-control'),'private, no-store');
+  assert.match(await res.text(),/跨来源事件/);
+ }
+ const merged=await fetch(origin+'/story/merged',{headers:{cookie:'infohub_session=B'},redirect:'manual'});
+ assert.equal(merged.status,308);assert.equal(merged.headers.get('location'),'/story/surviving');
+ assert.equal((await fetch(origin+'/story/missing',{headers:{cookie:'infohub_session=A'}})).status,404);
+ assert.equal((await fetch(origin+'/story/surviving',{headers:{authorization:'Bearer readonly-test'}})).status,200);
 });

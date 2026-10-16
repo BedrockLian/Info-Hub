@@ -12,7 +12,8 @@ const key=`digest-${tag()}`,secret=`EXCLUDED-${key}`;
 let hold:ReturnType<typeof gate>|null=null,asked=gate(),lastPrompt='';
 const provider=await stub(async(hit,req)=>{
  lastPrompt=req.body;asked.open();if(hold)await hold.promise;
- return {choices:[{message:{content:JSON.stringify({title:hit===1?secret:'保留事件',digest:hit===1?secret:'仅依据可保留报道写成的事件综述',latest:'保留进展'})}}],usage:{prompt_tokens:10,completion_tokens:10}};
+ const material=JSON.parse(JSON.parse(req.body).messages.at(-1).content) as Array<{id:string}>;
+ return {choices:[{message:{content:JSON.stringify({title:hit===1?secret:'保留事件',digest:hit===1?secret:'仅依据可保留报道写成的事件综述',latest:'保留进展',citedArticleIds:material.map(r=>r.id),latestArticleId:material.at(-1)!.id})}}],usage:{prompt_tokens:10,completion_tokens:10}};
 });
 process.env.DEEPSEEK_BASE_URL=provider.url;process.env.DEEPSEEK_API_KEY='test';
 after(async()=>{await provider.close();await stopBoss();await sql.end();});
