@@ -1,5 +1,5 @@
 {
-  "$comment": "个人核心RSS，30项；2026-10-16经确认精简高频综合与重复入口并应用云端，保留五领域、低频深度源，新增France 24亚太和卫报中国。默认仅摘要和原文链接；seed只新增缺失项，不自动停用旧项。",
+  "$comment": "个人核心RSS，32项；2026-10-17按优质导入要求新增第一财经研究院与澎湃·外交学人，使用内部RSSHub，每6小时抓取、首抓各限4条；保留此前30源与暂停状态。默认仅摘要和原文链接；seed只新增缺失项，不覆盖运营配置。",
   "sources": [
     {
       "id": "radar-bbc-world",
@@ -637,6 +637,67 @@
       ],
       "site_fulltext": false,
       "syndicate_fulltext": false
+    },
+    {
+      "id": "infohub-yicai-research",
+      "name": "第一财经研究院",
+      "kind": "rss",
+      "config": {
+        "rsshubRoute": "/yicai/author/100005663",
+        "summaryIsBody": true,
+        "_aihot": {
+          "initialBackfillLimit": 4
+        },
+        "ingestNoiseFilter": {
+          "dropMarkersTitleOnly": [
+            "讲座预告",
+            "活动预告",
+            "论坛预告",
+            "案例征集",
+            "招募"
+          ]
+        }
+      },
+      "tier": "T2",
+      "participation_mode": "editorial",
+      "interval_minutes": 360,
+      "first_party": false,
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "tags": [
+        "公共事务",
+        "经济研究"
+      ]
+    },
+    {
+      "id": "infohub-thepaper-diplomacy",
+      "name": "澎湃·外交学人",
+      "kind": "rss",
+      "config": {
+        "rsshubRoute": "/thepaper/list/25481",
+        "summaryIsBody": true,
+        "_aihot": {
+          "initialBackfillLimit": 4
+        },
+        "ingestNoiseFilter": {
+          "dropMarkersTitleOnly": [
+            "讲座预告",
+            "活动预告",
+            "论坛预告",
+            "招募"
+          ]
+        }
+      },
+      "tier": "T2",
+      "participation_mode": "editorial",
+      "interval_minutes": 360,
+      "first_party": false,
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "tags": [
+        "国际时事",
+        "公共事务"
+      ]
     }
   ]
 }

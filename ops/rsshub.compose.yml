@@ -38,6 +38,8 @@ services:
   worker:
     environment:
       RSSHUB_BASE_URL: http://rsshub:1200
-      DATABASE_POOL_MAX: '4'
+      # Three digest locks and a report lock can hold connections across AI requests.
+      # Keep room for their nested queries and paid receipts; four connections starve the worker.
+      DATABASE_POOL_MAX: '10'
       DATABASE_IDLE_TIMEOUT: '120'
       FETCH_CONCURRENCY: '2'

@@ -24,7 +24,11 @@ const provider=await stub(async(_hit,req)=>{
  const body=JSON.parse(req.body);wire.push(body);const material=JSON.parse(body.messages.at(-1).content);
  const curate=body.messages[0].content.includes('focusIds');
  if(curate&&mode==='held'){entered.open();await held.promise;}
- const data=curate?mode==='invalid'?{focusIds:['not-a-candidate'],briefIds:[]}:{focusIds:material.filter((e:any)=>e.selected).slice(0,5).map((e:any)=>e.id),briefIds:material.filter((e:any)=>!e.selected).slice(0,6).map((e:any)=>e.id)}:{leadItemId:material[0].id,title:material[0].title,leadParagraph:'本期汇总已有资料中的重要变化。'};
+ // Other tests can leave eligible articles in this completed day's window. The provider fixture
+ // must obey the real two-briefs-per-category contract rather than depend on the current hour.
+ const briefCounts=new Map<string,number>();
+ const briefIds=material.filter((e:any)=>!e.selected).filter((e:any)=>{const category=e.category??'other',count=briefCounts.get(category)??0;if(count>=2)return false;briefCounts.set(category,count+1);return true;}).slice(0,6).map((e:any)=>e.id);
+ const data=curate?mode==='invalid'?{focusIds:['not-a-candidate'],briefIds:[]}:{focusIds:material.filter((e:any)=>e.selected).slice(0,5).map((e:any)=>e.id),briefIds}:{leadItemId:material[0].id,title:material[0].title,leadParagraph:'本期汇总已有资料中的重要变化。'};
  return {choices:[{message:{content:JSON.stringify(data)},finish_reason:'stop'}],usage:{prompt_tokens:200,prompt_cache_hit_tokens:128,prompt_cache_miss_tokens:72,completion_tokens:100}};
 });
 process.env.REPORT_MODEL='default';process.env.LLM_MODEL='deepseek-flash';process.env.LLM_BASE_URL=provider.url;process.env.LLM_API_KEY='local-stub-key';config.privateSite=false;
