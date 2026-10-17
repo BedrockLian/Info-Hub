@@ -2,7 +2,7 @@
 
 当前目标：`news.blian117.dpdns.org` → `43.128.10.41`，服务器主机名 `VM-0-4-opencloudos`。2026-10-10 已上线，全站及订阅需要认证。共享 Nginx 主配置、`bedrock117.dpdns.org`、PHP、MySQL、trendradar-postgres 及其数据目录均不在改造范围。
 
-最新来源调整（2026-10-17 11:21）：按用户指定停用研究院和外交学人，四项新增源已首抓，现为34项启用／26项暂停。Reuters暂不可用；Taiwan News修复镜像已隔离验证，生产镜像尚未切换，见[六家媒体替换记录](rsshub-six-sources-20261017.md)。下文32源为此前恢复样本。
+最新来源调整（2026-10-17 11:28）：按用户指定停用研究院和外交学人，五项新增源已首抓，现为35项启用／25项暂停。Taiwan News修复经确认只重建RSSHub发布，生产RSSHUB_IMAGE为`infohub-rsshub:taiwannews-f9b39cca0d21`，内存上限384MiB保留，API／web／worker容器及启动时间不变；Reuters暂不可用继续暂停。备份`/opt/infohub/shared/backups/rsshub-taiwan-20261017T032612Z`及[六家媒体替换记录](rsshub-six-sources-20261017.md)。下文32源为此前恢复样本。
 
 2026-10-17最后核验的生产版本为 `2cad1acdd564b630acbc739857994bdc0b690242`，API、worker、web镜像及current标记一致。已部署仅内部访问的轻量RSSHub，后台可选RSSHub路由并预览；API连接池4、worker保留10、空闲回收120秒、采集并发2。已小量新增两项RSSHub来源，32个启用源、22个暂停源。模型次数60/分钟、1000/小时、12000/日，金额预算与模型／Pi并发未变。备份、生产验收、并发容量修正及恢复0a29c8e的方案见[RSSHub上线记录](rsshub.md)。
 

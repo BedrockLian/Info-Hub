@@ -1,5 +1,5 @@
 {
-  "$comment": "个人情报来源36项，34项启用；2026-10-17按用户指定移除第一财经研究院与澎湃·外交学人，新增AP、FT中文网、Reuters、RFA、日经及Taiwan News。Reuters入口故障、Taiwan News待路由修复发布，默认暂停；FT使用官方RSS，其余采用内部RSSHub。首次各限4条，仅摘要及原文链接；seed仅新增缺失项，不覆盖运营配置。",
+  "$comment": "个人情报来源36项，35项启用；2026-10-17按用户指定移除第一财经研究院与澎湃·外交学人，新增AP、FT中文网、Reuters、RFA、日经及Taiwan News。Taiwan News修复已发布启用，Reuters入口故障默认暂停；FT使用官方RSS，其余采用内部RSSHub。首次各限4条，仅摘要及原文链接；seed仅新增缺失项，不覆盖运营配置。",
   "sources": [
     {
       "id": "radar-bbc-world",
@@ -769,7 +769,7 @@
       ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "enabled": false
+      "enabled": true
     }
   ]
 }
