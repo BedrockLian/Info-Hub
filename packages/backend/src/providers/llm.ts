@@ -1,4 +1,5 @@
 import { modelWindow } from "./off-peak.ts";
+import { assertAiEnabled } from './ai-control.ts';
 import { reserveFlashUsd, estimateFlashUsd } from "./pricing.ts";
 // OpenAI-compatible chat calls, always through receipts. One model is enough: `default` is whatever the
 // deployment names in LLM_BASE_URL / LLM_API_KEY / LLM_MODEL, and every capability uses it unless an
@@ -221,7 +222,10 @@ export async function chatJson<S extends z.ZodType>(opts: ChatJsonOptions<S>): P
   const receipt = await schedule(()=>paidRequest(
     {
       maxCostUsd,
-      assertAvailable: budgeted ? () => { const window=modelWindow(new Date(),opts.timeoutMs ?? 120000); if(!window.allowed)throw new BudgetExceededError(spec.service,"off-peak schedule",window.retryAfterSeconds); } : undefined,
+      assertAvailable: async db => {
+        await assertAiEnabled(db);
+        if (budgeted) { const window=modelWindow(new Date(),opts.timeoutMs ?? 120000); if(!window.allowed)throw new BudgetExceededError(spec.service,"off-peak schedule",window.retryAfterSeconds); }
+      },
       service: spec.service,
       model: spec.model,
       purpose: opts.purpose,

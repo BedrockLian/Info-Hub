@@ -6,8 +6,11 @@ import { useAdminAction } from "../../features/admin/action";
 import { bj, num } from "../../features/admin/format";
 import { AdminPage, Badge, Button, Card, DataTable, Input, ReasonDialog } from "../../features/admin/ui";
 import { toast } from "../../features/admin/toast";
+import { AiControl } from '../../features/admin/ai-control';
+import type { AiRuntimeStatus } from '@aihot/contracts/ai-control';
 
 interface Settings {
+  ai: AiRuntimeStatus;
   modelBudget: {dayUsd:number;monthUsd:number;dayLimitUsd:number;monthLimitUsd:number;offPeakOnly:boolean};
   contact: { wechatQr: string; feishuQr: string };
   targets: Array<{ key: string; purpose: string; kind: string; enabled: boolean; enabled_at: string | null; config_ref: string | null; note: string | null; deliveries_7d: number; last_sent_at: string | null }>;
@@ -107,7 +110,8 @@ function TargetToggle({ t }: { t: Settings["targets"][number] }) {
 export default function SettingsAdmin({ loaderData: s }: Route.ComponentProps) {
   return (
     <AdminPage title="设置" subtitle="不改代码即可替换的运营设置。每次修改都写入审计记录。">
-      <Card title="模型金额预算与谷价时段"><p>仅在谷价时段发送模型请求；工作日北京时间 09:00–12:00、14:00–18:00 等待，其余时段及周末处理。</p><p className="mt-2">滚动 24 小时：${s.modelBudget.dayUsd.toFixed(3)} / ${s.modelBudget.dayLimitUsd.toFixed(2)}；滚动 30 天：${s.modelBudget.monthUsd.toFixed(3)} / ${s.modelBudget.monthLimitUsd.toFixed(2)}。</p><p className="mt-2 text-ink-3">按谷价与未命中缓存估算，未知结果保留预留额；服务商账单为准。金额上限在服务器 .env 设置，请求次数上限见下表。</p></Card>
+      <AiControl status={s.ai} />
+      <Card className="mt-5" title="模型金额预算与谷价时段"><p>仅在谷价时段发送模型请求；工作日北京时间 09:00–12:00、14:00–18:00 等待，其余时段及周末处理。</p><p className="mt-2">滚动 24 小时：${s.modelBudget.dayUsd.toFixed(3)} / ${s.modelBudget.dayLimitUsd.toFixed(2)}；滚动 30 天：${s.modelBudget.monthUsd.toFixed(3)} / ${s.modelBudget.monthLimitUsd.toFixed(2)}。</p><p className="mt-2 text-ink-3">按谷价与未命中缓存估算，未知结果保留预留额；服务商账单为准。金额上限在服务器 .env 设置，请求次数上限见下表。</p></Card>
       <div className="mt-5 grid gap-5 xl:grid-cols-2">
         <Card title="关于页二维码">
           <div className="space-y-5">

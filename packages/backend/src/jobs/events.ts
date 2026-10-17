@@ -1,4 +1,5 @@
 import { runDeferred } from "./defer.ts";
+import { assertAiEnabled } from '../providers/ai-control.ts';
 // Event jobs: serial grouping, debounced digests.
 import type { PgBoss } from "pg-boss";
 import { groupArticle } from "../events/group.ts";
@@ -16,6 +17,7 @@ export async function registerEventJobs(boss: PgBoss) {
   await boss.work<{ articleId: string; signalOnly?: boolean; force?: boolean }, unknown, typeof groupOptions>(QUEUES.group, groupOptions, async ([job]) => {
     if (!job) return;
     return runDeferred(async () => {
+      await assertAiEnabled();
       // A discussion post comes here straight from collection: record it first (settleNonEditorial).
       if (job.data.signalOnly && !job.data.force && !(await settleNonEditorial(job.data.articleId)).group) return { verdict: "skipped" };
       const result = await groupArticle(job.data.articleId, { signalOnly: job.data.signalOnly, force: job.data.force });
@@ -28,6 +30,6 @@ export async function registerEventJobs(boss: PgBoss) {
   await ensureQueue(QUEUES.digest);
   await boss.work<{ storyId: number; afterCorrection?: boolean }, unknown, typeof digestOptions>(QUEUES.digest, digestOptions, async ([job]) => {
     if (!job) return;
-    return runDeferred(() => composeStoryDigest(job.data.storyId, { afterCorrection: job.data.afterCorrection }), seconds => enqueue(QUEUES.digest, job.data, {singletonKey:job.singletonKey ?? `story:${job.data.storyId}`, startAfter:seconds, priority:job.priority}));
+    return runDeferred(async () => { await assertAiEnabled(); return composeStoryDigest(job.data.storyId, { afterCorrection: job.data.afterCorrection }); }, seconds => enqueue(QUEUES.digest, job.data, {singletonKey:job.singletonKey ?? `story:${job.data.storyId}`, startAfter:seconds, priority:job.priority}));
   });
 }

@@ -36,6 +36,8 @@ docker compose up -d --build
 
 在服务器 `.env` 填写 `LLM_API_KEY` 后再把 `COLLECT_ENABLED` 和 `MODEL_CALLS_ENABLED` 改为 `true`，重建服务容器。开发与测试保持外部调用关闭。
 
+后台「设置」顶部提供AI模块总开关：一键暂停／恢复新的AI请求，无需重启。已发出的请求正常收尾，等待中的任务自动继续，预算、模型、信源和各模块启停保持原样。服务器`MODEL_CALLS_ENABLED=false`仍是不可绕过的安全阀；暂停期间采集、阅读及日报规则基础版继续运行。详见[AI运行控制](docs/ai-control.md)。
+
 ## 部署与验证
 
 云端部署复用 `news.blian117.dpdns.org` 的现有 Nginx 和证书，仅 Web 绑定 `127.0.0.1:18082`；API、数据库不对宿主机开放。详见 [部署与回退](docs/infohub-deploy.md)。

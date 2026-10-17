@@ -51,7 +51,7 @@ export interface CallOutcome {
 export interface ReceiptRequest {
   /** Conservative upper bound, reserved atomically before a model request leaves the process. */
   maxCostUsd?: number;
-  assertAvailable?: () => void;
+  assertAvailable?: (db: Db) => void | Promise<void>;
   service: string;
   model?: string | null;
   purpose: string;
@@ -139,7 +139,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
       }
       if (existing.status === "unknown") return { kind: "unknown" as const, row: existing };
       // failed: the provider did not take the request, or its answer was unusable; a new attempt is allowed.
-      req.assertAvailable?.();
+      await req.assertAvailable?.(tx);
       await checkMoneyBudget(tx, req);
       await checkBudget(tx, req.service);
       const [r] = await tx<{ attempts: number }[]>`
@@ -147,7 +147,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
       const attemptId = await startAttempt(tx, existing.id, r!.attempts, req);
       return { kind: "call" as const, id: existing.id, attemptId,attempt:r!.attempts };
     }
-    req.assertAvailable?.();
+    await req.assertAvailable?.(tx);
     await checkMoneyBudget(tx, req);
     await checkBudget(tx, req.service);
     const [row] = await tx<{ id: number }[]>`
@@ -167,7 +167,7 @@ export async function paidRequest(req: ReceiptRequest, call: () => Promise<CallO
 
   const { id: receiptId, attemptId } = claimed;
   // Recheck after committing: DB contention must not make an admitted request start during a peak.
-  try { req.assertAvailable?.(); } catch (error) {
+  try { await req.assertAvailable?.(sql); } catch (error) {
     await sql.begin(async tx => {
       await tx`UPDATE receipts SET status='failed', error='deferred before send', updated_at=now() WHERE id=${receiptId}`;
       await tx`UPDATE receipt_attempts SET status='failed', budget_charge_usd=0, error='deferred before send', finished_at=now() WHERE id=${attemptId}`;

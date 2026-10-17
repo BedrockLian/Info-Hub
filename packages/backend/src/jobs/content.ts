@@ -13,6 +13,7 @@ import { isHistorical } from "../content/materials.ts";
 import { publishArticle } from "../publication/publish.ts";
 import { BudgetExceededError, ProviderRejectedError, ReceiptBusyError, ReceiptUnknownError } from "../providers/receipts.ts";
 import { ModelOutputError } from "../providers/llm.ts";
+import { assertAiEnabled, AiPausedError } from '../providers/ai-control.ts';
 import { ensureQueue, enqueue, QUEUES, shutdownSignal } from "./queue.ts";
 
 /** Minutes to wait after the n-th failed attempt; one more failure after the last ends in "failed". */
@@ -115,6 +116,7 @@ export async function processArticle(articleId: string, opts: { attemptTag?: str
     return { state: "skipped" };
   }
   try {
+    await assertAiEnabled();
     const result = await analyzeArticle(articleId, { attemptTag: opts.attemptTag });
     if (!result) return { state: "missing" };
     // Only a title or a feed summary: the article page first; extraction queues the analysis again.
@@ -168,7 +170,8 @@ async function afterFailure(articleId: string, error: unknown): Promise<{ state:
 
 export async function registerContentJobs(boss: PgBoss, concurrency = Number(process.env.ANALYZE_CONCURRENCY || 6)) {
   await ensureQueue(QUEUES.analyze);
-  await boss.work<{ articleId: string; attemptTag?: string }>(QUEUES.analyze, { localConcurrency: concurrency, pollingIntervalSeconds: 2 }, async ([job]) => {
+  const options = { localConcurrency: concurrency, pollingIntervalSeconds: 2, includeMetadata: true } as const;
+  await boss.work<{ articleId: string; attemptTag?: string }, unknown, typeof options>(QUEUES.analyze, options, async ([job]) => {
     if (!job) return;
     const { articleId, attemptTag } = job.data;
     try {
@@ -178,6 +181,12 @@ export async function registerContentJobs(boss: PgBoss, concurrency = Number(pro
       }
       return result;
     } catch (error) {
+      if (error instanceof AiPausedError) {
+        const result = await afterFailure(articleId, error);
+        // Keep a manual re-evaluation's identity and any partial paid results across a long pause.
+        await enqueue(QUEUES.analyze, job.data, {singletonKey:job.singletonKey ?? articleId,priority:job.priority,startAfter:error.retryAfterSeconds});
+        return result;
+      }
       return afterFailure(articleId, error);
     }
   });

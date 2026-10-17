@@ -10,6 +10,7 @@ import * as cheerio from "cheerio";
 import type { AnyNode, Element } from "domhandler";
 import { z } from "zod";
 import { sql } from "../db.ts";
+import { aiRuntimeStatus } from '../providers/ai-control.ts';
 import { sanitizeBody, textToHtml } from "../content/sanitize.ts";
 import { chatJson } from "../providers/llm.ts";
 import { collapseWhitespace } from "../lib/text.ts";
@@ -283,6 +284,7 @@ export async function translateQuotes(opts: { days?: number; limit?: number; bud
  * again whatever its age.
  */
 export async function translatePending(opts: { limit?: number; budgetMs?: number } = {}): Promise<{ done: TranslateResult[]; quotes: number }> {
+  if (!(await aiRuntimeStatus()).effectiveEnabled) return {done:[],quotes:0};
   const started = Date.now();
   const rows = await sql<{ article_id: string }[]>`
     SELECT p.article_id FROM publications p JOIN articles a ON a.id = p.article_id

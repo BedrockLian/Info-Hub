@@ -8,11 +8,11 @@ import { beijingDate, beijingTime } from "@aihot/contracts/time";
 import { sql } from "../db.ts";
 import { beijingDay, beijingStamp, duration, formatAlert, formatRecovery, sendAlert, type Finding, type Level } from "../notify/feishu.ts";
 import { backupConfigured } from "./backup.ts";
+import { aiRuntimeStatus } from '../providers/ai-control.ts';
 
 const REPEAT_MS: Record<Exclude<Level, "digest">, number> = { now: 3600_000, today: 24 * 3600_000 };
 
 const collecting = () => process.env.COLLECT_ENABLED !== "false";
-const modelsOn = () => process.env.MODEL_CALLS_ENABLED !== "false";
 /** How long the site may go without a new article before it counts as stalled (small source lists are quieter). */
 const QUIET_MS = Number(process.env.ALERT_QUIET_MINUTES || 360) * 60_000;
 
@@ -41,7 +41,7 @@ export async function collectFindings(now = Date.now()): Promise<Finding[]> {
       });
     }
   }
-  if (settled && collecting() && modelsOn()) {
+  if (settled && collecting() && (await aiRuntimeStatus()).effectiveEnabled) {
     const [p] = await sql<{ waiting: number; oldest: Date | null; failed: number }[]>`
       SELECT count(*) FILTER (WHERE processing_state = 'new' AND discovered_at < now() - interval '2 hours')::int AS waiting,
              min(discovered_at) FILTER (WHERE processing_state = 'new') AS oldest,

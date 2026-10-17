@@ -1,4 +1,4 @@
-import { modelBudgetStatus } from "@aihot/backend/admin/settings";
+import { aiRuntimeStatus } from '@aihot/backend/providers/ai-control';
 // /api/admin/*: queries are GET, creation POST, edits PATCH, business commands POST.
 // Every route goes through adminHandler (session + CSRF); manual changes are audited in the modules.
 import { readFile } from "node:fs/promises";
@@ -12,7 +12,7 @@ import { contentChain, detachFromFact, mergeStories, overrideFields, rerun, sear
 import { banSource, eraseFeedback, feedbackScreenshot, listFeedback, unbanSource, updateFeedback } from "@aihot/backend/admin/feedback";
 import { listMonitorEvents, listMonitorPosts, relinkPost, resolveMonitorPost, reviewReceipt, setWithdrawn, updateMonitorEvent } from "@aihot/backend/admin/monitor";
 import { releaseReceipt, requeueFailedArticles, resolveDelivery, runsOverview } from "@aihot/backend/admin/runs";
-import { listBudgets, listTargets, replaceContactQr, setTargetEnabled, updateBudget } from "@aihot/backend/admin/settings";
+import { listBudgets, listTargets, modelBudgetStatus, replaceContactQr, setAiEnabled, setTargetEnabled, updateBudget } from "@aihot/backend/admin/settings";
 import { createSource, fetchNow, listSources, previewSource, sourceDetail, updateSource } from "@aihot/backend/admin/sources";
 import { sql } from "@aihot/backend/db";
 import { loadContact } from "@aihot/backend/site/contact";
@@ -106,7 +106,12 @@ export function registerAdmin(app: FastifyInstance) {
   app.post("/api/admin/monitor/posts/:id/resolve", adminHandler(async (req, reply, admin) => orNotFound(req, reply, await resolveMonitorPost(param(req, "id"), body(req) as never, actorOf(admin)))));
 
   // Settings
-  app.get("/api/admin/settings", adminHandler(async () => ({ contact: await loadContact(), targets: await listTargets(), budgets: await listBudgets(), modelBudget: await modelBudgetStatus() })));
+  app.get("/api/admin/settings", adminHandler(async () => ({ contact: await loadContact(), targets: await listTargets(), budgets: await listBudgets(), modelBudget: await modelBudgetStatus(), ai: await aiRuntimeStatus() })));
+  app.put('/api/admin/settings/ai', adminHandler(async (req, _reply, admin) => {
+    const value = body(req).enabled;
+    if (typeof value !== 'boolean') throw Object.assign(new Error('enabled必须为布尔值'), {statusCode:400});
+    return setAiEnabled(value, actorOf(admin));
+  }));
   app.post("/api/admin/settings/contact-qr", adminHandler(async (req, _reply, admin) => {
     const b = body<{ slot: "wechatQr" | "feishuQr"; image: string }>(req);
     return replaceContactQr({ slot: b.slot, data: decodeImage(b.image) }, actorOf(admin));

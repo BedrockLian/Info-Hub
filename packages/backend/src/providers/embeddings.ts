@@ -6,6 +6,7 @@ import { config, credential } from "../config.ts";
 import { sql } from "../db.ts";
 import { sha256 } from "../lib/ids.ts";
 import { paidRequest, ProviderRejectedError } from "./receipts.ts";
+import { assertAiEnabled } from './ai-control.ts';
 
 const own = !!credential("models", "EMBEDDING_API_KEY");
 export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || (own ? "text-embedding-3-small" : "text-embedding-v4");
@@ -38,7 +39,7 @@ async function embedBatch(texts: string[], subject: string): Promise<number[][]>
   const key = own ? credential("models", "EMBEDDING_API_KEY") : credential("models", "DASHSCOPE_API_KEY");
   if (!key) throw new Error("EMBEDDING_API_KEY (or DASHSCOPE_API_KEY) missing");
   const receipt = await paidRequest(
-    { service: SERVICE, model: EMBEDDING_MODEL, purpose: "embedding", subject, identity: { model: EMBEDDING_MODEL, dims: EMBEDDING_DIMS, texts: texts.map((t) => sha256(t)) }, requestSummary: { count: texts.length } },
+    { assertAvailable: assertAiEnabled, service: SERVICE, model: EMBEDDING_MODEL, purpose: "embedding", subject, identity: { model: EMBEDDING_MODEL, dims: EMBEDDING_DIMS, texts: texts.map((t) => sha256(t)) }, requestSummary: { count: texts.length } },
     async () => {
       const res = await fetch(`${base.replace(/\/$/, "")}/embeddings`, {
         method: "POST",

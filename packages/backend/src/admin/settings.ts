@@ -9,6 +9,22 @@ import { sql } from "../db.ts";
 import { sha256 } from "../lib/ids.ts";
 import { loadContact, type ContactSettings } from "../site/contact.ts";
 import { audit } from "./auth.ts";
+import { aiRuntimeStatus } from '../providers/ai-control.ts';
+
+/** Absolute, idempotent writes; preference and audit commit together. No budgets are changed. */
+export async function setAiEnabled(enabled: boolean, actor: string) {
+  return sql.begin(async tx => {
+    await tx`SELECT pg_advisory_xact_lock(hashtext('settings:runtime.ai'))`;
+    const before = await aiRuntimeStatus(tx);
+    if (before.enabled !== enabled) {
+      await tx`INSERT INTO settings (key,value,updated_by) VALUES ('runtime.ai',${tx.json({enabled})},${actor})
+        ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value,updated_by=EXCLUDED.updated_by,updated_at=now()`;
+      await tx`INSERT INTO audit_log (actor,action,subject,reason,before,after)
+        VALUES (${actor},'settings.ai','settings:runtime.ai',${enabled?'网页AI总开关：恢复':'网页AI总开关：暂停'},${tx.json({enabled:before.enabled})},${tx.json({enabled})})`;
+    }
+    return aiRuntimeStatus(tx);
+  });
+}
 
 const MAX_QR_BYTES = 2 * 1024 * 1024;
 
