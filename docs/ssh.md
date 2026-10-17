@@ -1,5 +1,13 @@
 # 当前 SSH 连接
 
+2026-10-17 20:02发布复验：本机使用已配置的默认SSH身份可正常连接相同主机，严格主机校验保持开启；旧`D:\下载\1.pem`路径当前不存在，未复制或重新分发私钥。当前可用只读命令为：
+
+```powershell
+ssh -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 root@43.128.10.41 "hostname; id -un"
+```
+
+下表及显式`-i`示例保留2026-10-14的历史连接信息，仅在原私钥路径重新可用后使用，不能因路径失效关闭主机验证。
+
 2026-10-14（北京时间）实测：以下密钥成功连接 `VM-0-4-opencloudos`，登录用户为 `root`。
 
 | 项目 | 当前值 |

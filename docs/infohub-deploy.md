@@ -2,9 +2,11 @@
 
 当前目标：`news.blian117.dpdns.org` → `43.128.10.41`，服务器主机名 `VM-0-4-opencloudos`。2026-10-10 已上线，全站及订阅需要认证。共享 Nginx 主配置、`bedrock117.dpdns.org`、PHP、MySQL、trendradar-postgres 及其数据目录均不在改造范围。
 
+2026-10-17 20:02，经确认发布`aec9d94b95c9fbf1c0dacd51ae0530ed251ea7d6`并关闭云端AI总开关；API／web／worker及current一致，采集和阅读保持开启。运行配置、预算、模型、35启用／25暂停来源及RSSHub容器未变。备份`/opt/infohub/shared/backups/ai-control-20261017T120213Z`，操作与回退注意事项见[AI运行控制](ai-control.md)。下文上午的应用版本和“处理恢复”是此前记录。
+
 最新来源调整（2026-10-17 11:28）：按用户指定停用研究院和外交学人，五项新增源已首抓，现为35项启用／25项暂停。Taiwan News修复经确认只重建RSSHub发布，生产RSSHUB_IMAGE为`infohub-rsshub:taiwannews-f9b39cca0d21`，内存上限384MiB保留，API／web／worker容器及启动时间不变；Reuters暂不可用继续暂停。备份`/opt/infohub/shared/backups/rsshub-taiwan-20261017T032612Z`及[六家媒体替换记录](rsshub-six-sources-20261017.md)。下文32源为此前恢复样本。
 
-2026-10-17最后核验的生产应用版本为 `2cad1acdd564b630acbc739857994bdc0b690242`，API、worker、web镜像及current标记一致；后续Taiwan News修复只切换RSSHub。API连接池4、worker保留10、空闲回收120秒、采集并发2。当前35个启用源、25个暂停源，模型次数60/分钟、1000/小时、12000/日，金额预算与模型／Pi并发未变。备份、生产验收、并发容量修正及恢复0a29c8e的方案见[RSSHub上线记录](rsshub.md)；完整口径见[当前状态](status.md)。
+2026-10-17上午核验的生产应用版本为 `2cad1acdd564b630acbc739857994bdc0b690242`，API、worker、web镜像及current标记一致；后续Taiwan News修复只切换RSSHub。API连接池4、worker保留10、空闲回收120秒、采集并发2。35个启用源、25个暂停源，模型次数60/分钟、1000/小时、12000/日，金额预算与模型／Pi并发未变。备份、生产验收、并发容量修正及恢复0a29c8e的方案见[RSSHub上线记录](rsshub.md)；当前口径见[状态页](status.md)。
 
 2026-10-17 10:42连接恢复，记录显示10:23主机重启，超时原因仍未确认。两项来源首抓成功、各4篇；完整回归在暂停采集与AI处理时补跑，215项后端、14项网页通过，类型检查通过，10:51恢复处理。随后以公网HTTPS完成私有访问烟测（含真实事件页），后台RSSHub预览正常、普通内网抓取仍被拒绝。隔离测试容器、匿名测试卷及内部网络已清理，未覆盖生产数据库。10:52仍有启用源待分析462、失败55，暂停源保留1185待分析、152失败；未知付费回执没有强制放行。日志与来源核验保存在原生产备份的recovery-verify.json、recovery-limits.json及本机`.data/rsshub-20261016/`。
 
