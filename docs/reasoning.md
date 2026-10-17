@@ -2,7 +2,7 @@
 
 ## 当前已发布策略：Pi Agent Core
 
-用户本次明确要求精选及长期事件追踪使用低档，批量翻译关闭思考。工作区策略为 `infohub-pi-low-v2`：评分、内容理解、合并复核、周月报均改为 low，其余低档保留；抽取、普通摘要、导语和翻译保持关闭。简洁提示词 `infohub-concise-v1` 保留，内容理解总输出额度仍为16384，低档下限4096。下文2026-10-11的 high 配置与“先观察再降档”记录是历史策略。
+当前工作区及已发布策略为 `infohub-intelligence-v3`：在此前Pi低档策略上加入日报选题report_curate（low）。评分、内容理解、归组和复核、事件综述使用low；抽取、普通摘要、日报导语和翻译使用none。简洁提示词 `infohub-concise-v1` 保留，内容理解总输出额度仍为16384，低档下限4096。下文2026-10-11的high配置与“先观察再降档”记录是历史策略；当前来源、预算和版本见[状态页](status.md)。
 
 运行方式、缓存口径及验证限制见 [Pi 接入说明](pi-agent.md)。2026-10-14 已发布2a5de6225931f521a55f7d879425b65e2a30b608，运行中确认17个场景的low/none策略、现有密钥及预算；后端177项、Web13项与生产私有访问烟测通过。峰时尚无新版收费调用，实际输出和缓存提升幅度待自然任务观察。
 
@@ -13,19 +13,20 @@
 | 场景 | 调用目的 | 强度 | 原因 |
 |---|---|---|---|
 | 主题与立场预筛 | prefilter_article | low | 需要辨别事实与立场，且每篇必经，控制成本 |
-| 两次独立精选评分 | score_article | high | 需要综合五维标准及阅读价值 |
-| 入选及接近入选内容理解 | understand_article | high | 形成准确标题、摘要、推荐理由和标签 |
+| 两次独立精选评分 | score_article | low | 保留两次评分、五维标准及阅读价值判断 |
+| 入选及接近入选内容理解 | understand_article | low | 形成准确标题、摘要、推荐理由和标签 |
 | 字段结构抽取 | structure_article | 关闭 | 按已有文本抽取字段 |
 | 普通中文标题摘要 | summarize_article | 关闭 | 简单压缩和转述 |
 | 文章、信号、事件归组 | group_article / group_signal / group_story | low | 比较主体、动作、时间，判断关系 |
-| 文章及事件合并复核 | group_review / group_story_review | high | 合并会影响多篇内容，复核值得更多思考 |
+| 文章及事件合并复核 | group_review / group_story_review | low | 保留独立复核和引用校验 |
 | 事件综述 | story_digest | low | 整理多来源信息及进展 |
-| 日报标题、导语与亮点 | report_lead | 关闭 | 正文由现有条目组装，模型只写短导语和选亮点 |
-| 周报、月报综合分析 | report_weekly / report_monthly | high | 跨多条消息归纳主题；模块继续关闭 |
-| 全文及引用翻译 | translate_body / translate_quoted | 关闭 | 忠实翻译；模块继续关闭 |
+| 日报选题 | report_curate | low | 仅返回合格候选ID，重点必须来自精选 |
+| 日报标题、导语 | report_lead | 关闭 | 返回所选头条ID及跨领域短导语 |
+| 周报、月报综合分析 | report_weekly / report_monthly | low | 已配置策略；自动模块关闭 |
+| 全文及引用翻译 | translate_body / translate_quoted | 关闭 | 模块已开启，仅处理既有全文权限允许的精选 |
 | Codex 公告识别 | monitor.recognize | low | 判断公告语义；模块继续关闭 |
 
-没有实际 `report_daily` 模型请求；日报只调用 `report_lead`。`monitor.context` 是获取上下文的外部数据请求，不是模型调用。关闭中的模块不因本配置开启。
+没有实际 `report_daily` 模型请求；日报先保存不调用AI的基础版，异步调用 `report_curate` 和 `report_lead`。`monitor.context` 是获取上下文的外部数据请求，不是模型调用。关闭中的模块不因配置了推理档位而自动开启。
 
 依据 [DeepSeek 官方思考模式文档](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode/)（2026-10-11 核查），使用实际支持的 low/high，避免把 medium 误认为单独中档；不使用 max。思考开启时不发送无效的 temperature。低档的总输出额度至少4096 token，高档至少8192；内容理解保留原16384。额度同时容纳思考与答案，不是强制用量，仍可能截断或超时。长度截断一律记录为不可用，保留费用记录，后续重试仍受预算约束。
 

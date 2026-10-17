@@ -1,110 +1,69 @@
-# 部署
+# 新环境部署
 
-## 用 Docker（推荐）
+这是当前Info-Hub配置的安装说明。本站现有云端的版本、双Compose覆盖文件、备份与回退见[生产运维说明](infohub-deploy.md)；更新GitHub代码不等于授权切换生产。需要Node.js 24.11以上、Docker及Compose，容器内使用PostgreSQL 17。2GB服务器已能运行本站，但不宜同时执行完整构建和生产处理；完整构建与回归优先放在独立机器或GitHub CI。
 
-需要一台装了 Docker（带 Compose）的机器。云服务器建议至少 2 核、4 GB 内存，构建镜像时要用到。
-
-```bash
-git clone https://github.com/KKKKhazix/AIHOT.git myhot
-cd myhot
-node scripts/init-env.ts --llm-key <你的模型 API Key>
-docker compose up -d --build
-```
-
-`init-env.ts` 会生成 `.env`，填好随机密钥和管理员密码，并把密码打印一次。机器上没有 Node 的话，把 `.env.example` 复制成 `.env`，自己填 `ADMIN_PASSWORD`（至少 12 位）、`SESSION_SECRET`、`IMG_PROXY_SIGN_SECRET`、`POSTGRES_PASSWORD`（各用 `openssl rand -hex 32` 生成）和 `LLM_API_KEY`。
-
-启动后打开 `http://服务器地址:3000`，后台在 `/admin`，用管理员密码登录。第一次启动会导入示范信源，一两分钟后开始出现内容；第一次导入的一百多条资料大约半小时处理完（每条都要预筛、评分，入选的还要写标题摘要）。
-
-`docker compose` 会起五个容器：`db`（PostgreSQL 17）、`setup`（每次启动先跑数据库迁移和种子数据，然后退出）、`api`、`worker`（抓取、模型处理、定时任务）、`web`（网页）。
-
-### 在中国大陆的服务器上
-
-- 构建时 npm 走国内镜像：`docker compose build --build-arg NPM_REGISTRY=https://registry.npmmirror.com`，然后 `docker compose up -d`。
-- 拉取 Docker 镜像慢，先给 Docker 配置镜像加速。
-- 海外信源抓不到时，在 `.env` 里设置 `EGRESS_PROXY_URL`：抓信源、图片和模型榜数据时走这个代理，调用模型接口不走。
-- 对外提供网站服务需要先完成 ICP 备案，备案号填在 `industry/site.ts` 的 `icp`。
-
-### 配域名和 HTTPS
-
-先把域名解析到服务器，然后在 `.env` 里设置：
+## Docker启动
 
 ```bash
-SITE_URL=https://example.com
-SITE_DOMAIN=example.com
-PORT=127.0.0.1:3000        # 3000 端口只给本机的 Caddy 用，不直接对外
-TRUST_PROXY=true           # 访客地址从 Caddy 转来的请求头里读
-```
-
-再用带 HTTPS 的方式启动，Caddy 会自动申请和续期证书：
-
-```bash
-docker compose --profile https up -d --build
-```
-
-已经有 Nginx 的话，不用 Caddy，把站点反向代理到 `http://127.0.0.1:3000`，带上 `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`，并在 `.env` 里设 `TRUST_PROXY=true`。`SITE_URL` 一定要写成读者实际访问的地址：生成的链接、RSS、分享图和 MCP 都用它。
-
-### 更新
-
-```bash
-git pull
-docker compose up -d --build
-```
-
-数据库迁移只做向后兼容的增量，更新时自动执行。
-
-### 备份
-
-在 `.env` 里配置 `DB_BACKUP_STORE_*`（任何 S3 兼容的对象存储），每天 04:10 自动备份到那里。也可以手动导出：
-
-```bash
-docker compose exec -T db pg_dump -U aihot aihot | gzip > myhot-$(date +%F).sql.gz
-```
-
-数据都在三个 Docker 卷里：`db`（数据库）、`data`（上传的图片、图片缓存、本地备份）、`caddy`（证书）。`docker compose down` 不会删除它们；`docker compose down -v` 会。
-
-### 看日志
-
-```bash
-docker compose logs -f --tail 100 api worker web
-```
-
-后台的“运行”页能看到每个定时任务最近的结果，“信源”页能看到每个信源的抓取状况。
-
-## 花多少钱
-
-- **模型**：每条新资料至少预筛一次；可能入选的再评分两次，入选的还要写标题摘要、打标签、归组，另外还有日报和事件综述。我们用示范信源在本地试跑，第一次导入的 152 条资料一共用了大约 930 次模型调用。之后每天用多少，取决于你的信源每天更新多少条。后台“模型与评测”页能看到每一步的调用次数和输入输出 token 数。
-- **付费采集**（X、公众号、Jina）：按请求计费，默认不启用，填了 key 才会用。
-- 所有付费服务都有每分钟、每小时、每天的调用上限（后台“设置 → 预算”），超过就暂停，不会一夜之间刷爆账单。填 0 表示立即停用这个服务。
-
-## 不用 Docker
-
-需要 Node.js 24.11 以上和 PostgreSQL 16 或 17。
-
-```bash
+git clone https://github.com/BedrockLian/Info-Hub.git
+cd Info-Hub
 npm ci
-node scripts/init-env.ts --llm-key <你的模型 API Key>
-createdb myhot
+node scripts/init-env.ts --quiet
+docker compose up -d --build
 ```
 
-在 `.env` 里加上：
+脚本拒绝覆盖已有.env，生成独立管理员密码、会话／图片签名及数据库密钥。访问密码从本机.env的ADMIN_PASSWORD读取；API Key只在本机或服务器运行配置里填写，不放进命令行、仓库或文档。默认不采集、不调用模型、不外发。
+
+浏览器打开http://127.0.0.1:18082，全站需登录，后台为/admin。根Compose只将Web绑定到宿主机回环；API与数据库不暴露宿主机端口。不要以服务器公网地址的3000端口作为默认入口。
+
+首次启动依次执行数据库迁移和种子，再启动API、worker、web。当前默认包36项、35启用、Reuters暂停；seed只插入缺失来源，保留既有频率、启停和权限。出现内容的时间取决于采集开关、模型／金额／次数阀及处理队列，不承诺启动后自动付费或固定时间完成回填。
+
+## 可选的内部RSSHub
+
+默认包中的部分来源需要内部RSSHub。新环境可直接构建本仓库的Taiwan News兼容镜像：
 
 ```bash
-DATABASE_URL=postgres://你的用户名@127.0.0.1:5432/myhot
-API_BASE_URL=http://127.0.0.1:3001
+docker build -t infohub-rsshub:local ops/rsshub-overrides
 ```
 
-然后：
+在本机.env追加以下非秘密配置（已有项应修改原项，避免重复）：
+
+```dotenv
+RSSHUB_IMAGE=infohub-rsshub:local
+RSSHUB_BASE_URL=http://rsshub:1200
+```
 
 ```bash
-node --env-file=.env scripts/migrate.ts
-node --env-file=.env scripts/seed.ts
-npm run build -w @aihot/web
-
-node --env-file=.env apps/api/src/main.ts          # 接口，3001 端口
-node --env-file=.env apps/worker/src/main.ts       # 后台任务
-cd apps/web && NODE_ENV=production node --env-file=../../.env server.ts   # 网页，3000 端口
+docker compose -f docker-compose.yml -f ops/rsshub.compose.yml up -d --build
 ```
 
-三个进程要一直运行，生产环境用 systemd 或 pm2 守护。
+之后继续使用两份Compose文件。覆盖文件将API连接池设为4、worker保留10、空闲回收120秒、采集并发2；RSSHub上限384MiB、0.5核，无宿主机端口、Redis或浏览器。不要把worker池降为4，其事件／日报锁与嵌套查询会发生连接饥饿。
 
-开发时用带热更新的方式：`npm run dev:api`、`npm run dev:worker`、`npm run dev:web`。开发时想免登录进后台，在 `.env` 里设 `DEV_AUTH_ROLE=admin`（生产环境会拒绝启动）。
+未部署RSSHub时，可在后台暂停配置包含rsshubRoute的来源；不要打开全局私网抓取来代替专用内部入口。后台新建RSS源可选“本站RSSHub”，只填相对路由并先预览。rsshubRoute与feedUrl互斥，RSSHub不会授予全文展示权。更多说明见[RSSHub](rsshub.md)及[覆盖模块](../ops/rsshub-overrides/README.md)。
+
+## 域名与HTTPS
+
+根Compose没有Caddy容器或https profile。用已有Nginx或其他反向代理提供HTTPS，将流量转发到http://127.0.0.1:18082；在.env中设置真实SITE_URL=https://你的域名，有可信代理时启用TRUST_PROXY。PORT是纯数字宿主机端口，默认18082，绑定地址已在Compose中固定为127.0.0.1，不填写127.0.0.1:3000。
+
+RSS客户端使用后台创建的可撤销、有限期只读Bearer令牌。Cookie用于浏览器登录；Bearer没有后台写权限，不在查询参数里传递令牌。生产模式强制私有，内容响应禁用共享缓存。
+
+## 启用与更新
+
+核验信源预览、正文／摘要权限以及模型预算后，在.env配置LLM_API_KEY并按需打开COLLECT_ENABLED与MODEL_CALLS_ENABLED，再以同一Compose组合重建受影响的应用服务。新环境采用默认金额和次数阀；本站生产自定义值见[当前状态](status.md)，不能把两者混为一套。
+
+普通新安装可在备份后更新代码并重新构建。本站生产使用已验收的版本目录与镜像，先确认发布，保留/opt/infohub/shared/rsshub.compose.yml和现有密钥，不直接套用git pull与Compose重建覆盖生产配置。迁移只做向后兼容增量；失败回退应用镜像，保留新增数据和付费回执，不恢复旧整库覆盖新写入。
+
+## 备份与日志
+
+```bash
+docker compose exec -T db pg_dump -U infohub -d infohub > infohub-backup.sql
+docker compose logs --tail 100 api worker web
+```
+
+使用RSSHub时，上述管理命令也保留两份Compose参数。数据库在db卷，上传／图片缓存及本地附件在data卷；根配置没有caddy卷。备份文件和运行.env含敏感内容，应限制访问并留在Git之外。docker compose down -v会删除数据卷，不用于普通更新或回退。对象存储备份配置见.env.example，不能把配置存在当作已验证备份成功。
+
+## 不使用Docker
+
+准备Node.js 24.11以上及独立PostgreSQL数据库，执行npm ci和init-env，填写DATABASE_URL、API_BASE_URL及模型配置；迁移、种子与Web构建后分别运行API、worker和Web。完整命令与检查见[架构](architecture.md)和README。
+
+开发保持采集、模型及外发关闭。完整后端和网页回归以Linux CI为准；Windows存在已有绝对路径动态导入与退出信号差异，不以本地构建代替运行测试。

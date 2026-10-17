@@ -48,6 +48,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Typecheck
         run: npm run typecheck
+      - name: RSSHub compatibility tests
+        run: node --test ops/rsshub-overrides/taiwannews-parser.test.mjs
       - name: Build web
         run: npm run build -w @aihot/web
       - name: Web tests

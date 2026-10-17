@@ -1,5 +1,7 @@
 # 架构
 
+当前实例是跨领域私有情报站。下图展示可用能力，自动周报／月报和部分采集渠道未开启；运行版本、启停和资源配置见[当前状态](status.md)。图中的“公开读取层”是统一内容权限边界，不代表允许匿名访问。
+
 ```mermaid
 flowchart LR
   S["信源<br/>RSS · 网页 · JSON · X · 公众号 · 外部推送"] --> C["采集<br/>判重 · 抓原文"]
@@ -28,7 +30,7 @@ flowchart LR
 - **花钱的请求有回执**：每个付费请求（模型、X、公众号、Jina）先记一张回执，拿到结果先存再用。进程重启、任务重试时，复用已经付过钱的结果，不重复花钱（`providers/receipts.ts`）。
 - **预算熔断**：每个付费服务有每分钟、每小时、每天的上限，超过就暂停（后台“设置 → 预算”）。
 - **安全阀**：`COLLECT_ENABLED`、`MODEL_CALLS_ENABLED`、`FEISHU_CONTENT_PUSH_ENABLED`、`FEISHU_INTERNAL_ENABLED`、`INDEXNOW_SUBMIT_ENABLED` 只决定“发不发出去”，不决定走哪套逻辑。开发和测试时关掉。
-- **公开内容匿名**：管理员和访客看到的一样；读者的收藏、已读存在浏览器里。后台只允许管理员。
+- **私有读取与后台分权**：生产强制私有，网页需登录，RSS／API／MCP需有效只读Bearer令牌或对应会话。后台写入仅允许管理员；各出口继续执行统一发布权限，排除与待审内容不会因登录而开放。
 - **旧文不刷屏**：发现时已发布超过 48 小时的资料、新信源的存量、回灌的推送，按原文时间归档，不进“今天”、不推送。
 - **来源可追溯**：每条精选都链接原文；站内是否显示全文由信源的 `site_fulltext` 决定，默认只显示摘要。
 
@@ -70,8 +72,8 @@ flowchart LR
 npm run typecheck
 createdb myhot_test
 DATABASE_URL=postgres://127.0.0.1:5432/myhot_test node scripts/migrate.ts
-DATABASE_URL=postgres://127.0.0.1:5432/myhot_test npm test
+PRIVATE_SITE=false DATABASE_URL=postgres://127.0.0.1:5432/myhot_test npm test
 npm run build -w @aihot/web && node --test apps/web/tests/*.test.ts
 ```
 
-测试不访问任何外部服务：模型和付费接口都由本地假服务回答。
+测试不访问任何外部服务：模型和付费接口都由本地假服务回答。上例关闭私有模式是为通用读取层测试设置的独立环境，专门的私有访问测试自行启用它；不得套用到生产。完整执行顺序和构建后私有烟测以[Check工作流](../.github/workflows/check.yml)为准。

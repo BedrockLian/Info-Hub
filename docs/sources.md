@@ -2,6 +2,8 @@
 
 信源在后台“信源”页管理：新建、试抓一次看看抓到什么、改频率、启停、看失败原因和最近的条目。首次启动时，`industry/sources.json` 里的示范信源会被导入。
 
+当前默认包36项、35启用、Reuters暂停；本站生产另保留旧来源历史，数量口径见[当前状态](status.md)。seed只添加缺失来源，不用它覆盖生产启停或频率。停用来源暂停未开始的分析／抽取与批量重试，保留文章、历史发布和付费回执，重新启用可恢复；不能把暂停历史积压当作启用来源的处理负担。
+
 ## 六种信源
 
 | 类型 | 适合 | 需要 |
@@ -22,6 +24,14 @@
 ```
 
 可选：`summaryIsBody`（订阅里的摘要就是全文）、`allowCategories` / `denyCategories`（按订阅里的分类过滤）。
+
+内部RSSHub改用以下配置，不能同时填写feedUrl：
+
+```json
+{"rsshubRoute":"/taiwannews/hot/en","summaryIsBody":true,"_aihot":{"initialBackfillLimit":4}}
+```
+
+rsshubRoute只接受相对路由；地址由运营者的RSSHUB_BASE_URL决定，信源不能指定另一个内网origin。普通网页／图片抓取仍禁止内网。后台可选择“本站RSSHub”并预览；接入方式不改变一手身份和全文展示权限。路由是否能用、是否返回当前文章应从部署位置实测，目录存在不代表本站可抓取。当前六家媒体的可用情况及Reuters故障见[核验记录](rsshub-six-sources-20261017.md)。
 
 ### web_list
 

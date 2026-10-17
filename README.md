@@ -6,6 +6,14 @@
 
 个人立场判断按文章文字，不按国籍或媒体名称。排除与待审内容不进入阅读出口；后台保留理由、原文证据和人工修正审计。原文版权归来源所有，默认只显示摘要与原文链接。
 
+## 当前功能与文档
+
+- [当前状态及版本](docs/status.md)：区分仓库代码、生产应用、RSSHub镜像与运行配置。
+- [信源配置](docs/sources.md)：原生RSS、内部RSSHub、首次限量、可恢复暂停与全文权限。
+- [关注榜与情报日报](docs/intelligence.md)、[事件系统](docs/event-system-20261016.md)：独立事件、重点／简讯、Pi归组与引用校验。
+- [Pi接入与缓存](docs/pi-agent.md)、[思考强度](docs/reasoning.md)：统一付费回执、固定提示前缀、原生缓存与结果复用。
+- [新环境部署](docs/deploy.md)、[本站生产运维](docs/infohub-deploy.md)、[RSSHub及回退](docs/rsshub.md)。
+
 ## 本机启动
 
 ```bash
@@ -15,6 +23,8 @@ docker compose up -d --build
 ```
 
 访问 http://127.0.0.1:18082 。访问密码在本机 `.env` 的 `ADMIN_PASSWORD` 字段，勿提交或公开它。默认不采集、不调用模型、不发送通知。
+
+部分默认源依赖内部RSSHub，启用采集前先按[RSSHub说明](docs/deploy.md#可选的内部rsshub)部署；未部署时可在后台暂停这些源。Taiwan News修复镜像可以从仓库构建，生产本地镜像标签不能直接从公共镜像库拉取。
 
 ## 模型与费用
 
@@ -40,5 +50,7 @@ node --env-file=.env scripts/private-smoke.ts --base http://127.0.0.1:18082
 ```
 
 SSH 交接归档加密保存在 `ops/credentials`，不进入应用镜像或发布包。解密口令、私钥和运行密钥均在 Git 外。
+
+完整检查以Linux的[GitHub Check](https://github.com/BedrockLian/Info-Hub/actions/workflows/check.yml)为准，使用临时数据库和本地模型替身，不连接生产服务。RSSHub覆盖模块另跑 `node --test ops/rsshub-overrides/taiwannews-parser.test.mjs`。Windows当前网页测试存在绝对路径动态导入限制，后端部分退出信号和Shell测试也依赖Linux；本地类型检查或构建成功不能替代Linux完整回归。GitHub推送只触发检查，不自动部署本站。
 
 上游：[AIHOT](https://github.com/BedrockLian/AIHOT)。许可证及原作者归属见 LICENSE、NOTICE。详细需求见 `docs/superpowers/specs/2026-10-10-infohub-design.md`。

@@ -4,7 +4,7 @@
 
 最新来源调整（2026-10-17 11:28）：按用户指定停用研究院和外交学人，五项新增源已首抓，现为35项启用／25项暂停。Taiwan News修复经确认只重建RSSHub发布，生产RSSHUB_IMAGE为`infohub-rsshub:taiwannews-f9b39cca0d21`，内存上限384MiB保留，API／web／worker容器及启动时间不变；Reuters暂不可用继续暂停。备份`/opt/infohub/shared/backups/rsshub-taiwan-20261017T032612Z`及[六家媒体替换记录](rsshub-six-sources-20261017.md)。下文32源为此前恢复样本。
 
-2026-10-17最后核验的生产版本为 `2cad1acdd564b630acbc739857994bdc0b690242`，API、worker、web镜像及current标记一致。已部署仅内部访问的轻量RSSHub，后台可选RSSHub路由并预览；API连接池4、worker保留10、空闲回收120秒、采集并发2。已小量新增两项RSSHub来源，32个启用源、22个暂停源。模型次数60/分钟、1000/小时、12000/日，金额预算与模型／Pi并发未变。备份、生产验收、并发容量修正及恢复0a29c8e的方案见[RSSHub上线记录](rsshub.md)。
+2026-10-17最后核验的生产应用版本为 `2cad1acdd564b630acbc739857994bdc0b690242`，API、worker、web镜像及current标记一致；后续Taiwan News修复只切换RSSHub。API连接池4、worker保留10、空闲回收120秒、采集并发2。当前35个启用源、25个暂停源，模型次数60/分钟、1000/小时、12000/日，金额预算与模型／Pi并发未变。备份、生产验收、并发容量修正及恢复0a29c8e的方案见[RSSHub上线记录](rsshub.md)；完整口径见[当前状态](status.md)。
 
 2026-10-17 10:42连接恢复，记录显示10:23主机重启，超时原因仍未确认。两项来源首抓成功、各4篇；完整回归在暂停采集与AI处理时补跑，215项后端、14项网页通过，类型检查通过，10:51恢复处理。随后以公网HTTPS完成私有访问烟测（含真实事件页），后台RSSHub预览正常、普通内网抓取仍被拒绝。隔离测试容器、匿名测试卷及内部网络已清理，未覆盖生产数据库。10:52仍有启用源待分析462、失败55，暂停源保留1185待分析、152失败；未知付费回执没有强制放行。日志与来源核验保存在原生产备份的recovery-verify.json、recovery-limits.json及本机`.data/rsshub-20261016/`。
 
@@ -60,15 +60,15 @@ MODEL_BUDGET_DAY_USD=2.50
 MODEL_BUDGET_30D_USD=75
 ```
 
-该附加参数作为未知场景的兜底。私有站已知 AI 场景由 [分场景思考配置](reasoning.md) 覆盖。当前待发布的 Pi 版本按用户最新要求将精选、理解、复核和事件追踪设为低档，抽取、普通摘要、日报短导语及翻译关闭；2026-10-11生产版本仍采用历史高低档配置。无需修改运行密钥或全局附加参数。发布状态及缓存统计见 [Pi 接入说明](pi-agent.md)。
+该附加参数作为未知场景的兜底。私有站已知AI场景由[分场景思考配置](reasoning.md)覆盖；已发布策略将精选、理解、复核、事件追踪和日报选题设为low，抽取、普通摘要、日报导语及翻译设为none。无需为此修改运行密钥或全局附加参数。发布状态及缓存统计见[Pi接入说明](pi-agent.md)。
 
-在 `/opt/infohub/current` 运行 `INFOHUB_RELEASE=<当前commit> docker compose -p infohub up -d --force-recreate api worker web`。查看 `/admin/settings` 金额与请求上限、`/admin/runs` 回执和错误。后台不能绕过谷价或金额熔断。首次回填每源最多 8 条；旧模型榜、Codex 监控、自动全文翻译和自动周月报关闭。
+运行配置变更经确认后，在`/opt/infohub/current`使用已验收的应用版本和两份Compose配置重建受影响服务：`INFOHUB_RELEASE=<已验收应用commit> docker compose --env-file /opt/infohub/shared/.env -p infohub -f docker-compose.yml -f /opt/infohub/shared/rsshub.compose.yml up -d --no-build api worker web`。不要把最新文档提交当作已构建应用镜像。后台查看金额／次数和回执，不能绕过谷价或金额熔断。首次回填按各源_aihot.initialBackfillLimit配置，新六源各最多4篇；全文翻译开启但受原发布权限限制，模型榜、Codex监控、自动周月报关闭。
 
 RSS 阅读器须支持自定义 `Authorization: Bearer <令牌>` 请求头。令牌在 `/admin/tokens` 创建，数据库只保存摘要，可设有效期或撤销；不接受查询字符串中的 token。令牌没有后台权限。
 
 ## 谷价与预算依据
 
-2026-10-13 核对官方价格：https://api-docs.deepseek.com/quick_start/pricing 。Flash 谷价为每百万未命中输入 token $0.15、命中输入 $0.003、输出 $0.60。当前待发布的 Pi 版本预留不计折扣，结算估算仅在原生缓存计数有效时计入折扣；历史版本未计折扣。峰时是工作日 UTC 01:00–04:00、06:00–10:00，即北京时间 09:00–12:00、14:00–18:00。周末全日谷价。谷价结束前按请求超时加 30 秒停止接收新模型请求。
+2026-10-13核对并写入定价的官方参考：https://api-docs.deepseek.com/quick_start/pricing 。本站已配置Flash谷价为每百万未命中输入token $0.15、命中输入$0.003、输出$0.60；这是当时核验的定价记录，不宣称永不变动。已发布Pi链路预留不计折扣，结算估算仅在原生缓存计数有效时计入折扣。峰时是工作日UTC 01:00–04:00、06:00–10:00，即北京时间09:00–12:00、14:00–18:00；周末全日谷价。谷价结束前按请求超时加30秒停止接收新模型请求。
 
 规划使用 `node scripts/cost-plan.ts`，是假设而非实测：60% 候选通过，预筛 3800/160 token；每个通过项两次评分各 7000/24、结构 3000/220、写作 3500/400；另假设 50% 需归组 7000/180、15% 需综述 6000/350，每日日报 10000/900。
 
