@@ -2,6 +2,8 @@
 
 目的：为没有原生RSS的网站提供可选的RSSHub采集，保持现有发布审核、Pi处理、预算、来源暂停及全文权限。部署RSSHub本身不新增监控来源，也不调用AI。
 
+最新来源状态：2026-10-17按用户指定移除研究院与外交学人，新增六家媒体配置；四项首抓成功启用、Reuters及Taiwan News暂停。Taiwan News修复镜像已完成隔离验证，待生产切换确认，见[六源替换记录](rsshub-six-sources-20261017.md)。下述32源样本为此前上线及恢复的历史记录。
+
 ## 上线记录
 
 2026-10-16北京时间23:53，经用户明确要求部署，生产应用切换为 `2cad1acdd564b630acbc739857994bdc0b690242`。RSSHub固定镜像为 `ghcr.io/diygod/rsshub@sha256:a1e7e833825780ae29d0f761029cea4cd313856ad63402e8d9caad277b9e2311`，镜像源版本 `0f184a37d49cbf1ac0d759aa41fe3b3c1ef25f10`。API／web／worker与current一致，RSSHub健康、没有宿主机端口、重启0、OOM0。

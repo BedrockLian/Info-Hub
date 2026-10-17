@@ -1,5 +1,5 @@
 {
-  "$comment": "个人核心RSS，32项；2026-10-17按优质导入要求新增第一财经研究院与澎湃·外交学人，使用内部RSSHub，每6小时抓取、首抓各限4条；保留此前30源与暂停状态。默认仅摘要和原文链接；seed只新增缺失项，不覆盖运营配置。",
+  "$comment": "个人情报来源36项，34项启用；2026-10-17按用户指定移除第一财经研究院与澎湃·外交学人，新增AP、FT中文网、Reuters、RFA、日经及Taiwan News。Reuters入口故障、Taiwan News待路由修复发布，默认暂停；FT使用官方RSS，其余采用内部RSSHub。首次各限4条，仅摘要及原文链接；seed仅新增缺失项，不覆盖运营配置。",
   "sources": [
     {
       "id": "radar-bbc-world",
@@ -639,65 +639,137 @@
       "syndicate_fulltext": false
     },
     {
-      "id": "infohub-yicai-research",
-      "name": "第一财经研究院",
+      "id": "infohub-apnews",
+      "name": "AP News·国际动态",
       "kind": "rss",
       "config": {
-        "rsshubRoute": "/yicai/author/100005663",
-        "summaryIsBody": true,
+        "rsshubRoute": "/apnews/mobile/world-news",
         "_aihot": {
           "initialBackfillLimit": 4
-        },
-        "ingestNoiseFilter": {
-          "dropMarkersTitleOnly": [
-            "讲座预告",
-            "活动预告",
-            "论坛预告",
-            "案例征集",
-            "招募"
-          ]
         }
       },
       "tier": "T2",
-      "participation_mode": "editorial",
-      "interval_minutes": 360,
       "first_party": false,
+      "participation_mode": "editorial",
+      "interval_minutes": 120,
+      "tags": [
+        "国际时事"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
-      "tags": [
-        "公共事务",
-        "经济研究"
-      ]
+      "enabled": true
     },
     {
-      "id": "infohub-thepaper-diplomacy",
-      "name": "澎湃·外交学人",
+      "id": "infohub-ft-chinese",
+      "name": "Financial Times·FT中文网",
       "kind": "rss",
       "config": {
-        "rsshubRoute": "/thepaper/list/25481",
-        "summaryIsBody": true,
+        "feedUrl": "https://www.ftchinese.com/rss/feed",
         "_aihot": {
           "initialBackfillLimit": 4
-        },
-        "ingestNoiseFilter": {
-          "dropMarkersTitleOnly": [
-            "讲座预告",
-            "活动预告",
-            "论坛预告",
-            "招募"
-          ]
         }
       },
       "tier": "T2",
+      "first_party": false,
       "participation_mode": "editorial",
       "interval_minutes": 360,
-      "first_party": false,
+      "tags": [
+        "公共事务",
+        "经济"
+      ],
       "site_fulltext": false,
       "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "infohub-reuters-china",
+      "name": "Reuters·中国",
+      "kind": "rss",
+      "config": {
+        "rsshubRoute": "/reuters/world/china",
+        "_aihot": {
+          "initialBackfillLimit": 4
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "participation_mode": "editorial",
+      "interval_minutes": 180,
       "tags": [
         "国际时事",
-        "公共事务"
-      ]
+        "外媒对华"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": false
+    },
+    {
+      "id": "infohub-rfa-english",
+      "name": "Radio Free Asia·英文",
+      "kind": "rss",
+      "config": {
+        "rsshubRoute": "/rfa/english",
+        "summaryIsBody": true,
+        "_aihot": {
+          "initialBackfillLimit": 4
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "participation_mode": "editorial",
+      "interval_minutes": 180,
+      "tags": [
+        "国际时事",
+        "外媒对华"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "infohub-nikkei-international",
+      "name": "The Nikkei·国际免费报道",
+      "kind": "rss",
+      "config": {
+        "rsshubRoute": "/nikkei/news/international/free",
+        "summaryIsBody": true,
+        "_aihot": {
+          "initialBackfillLimit": 4
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "participation_mode": "editorial",
+      "interval_minutes": 180,
+      "tags": [
+        "国际时事",
+        "经济"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": true
+    },
+    {
+      "id": "infohub-taiwannews",
+      "name": "Taiwan News·英文热点",
+      "kind": "rss",
+      "config": {
+        "rsshubRoute": "/taiwannews/hot/en",
+        "summaryIsBody": true,
+        "_aihot": {
+          "initialBackfillLimit": 4
+        }
+      },
+      "tier": "T2",
+      "first_party": false,
+      "participation_mode": "editorial",
+      "interval_minutes": 180,
+      "tags": [
+        "国际时事"
+      ],
+      "site_fulltext": false,
+      "syndicate_fulltext": false,
+      "enabled": false
     }
   ]
 }
