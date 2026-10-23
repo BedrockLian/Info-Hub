@@ -1,5 +1,7 @@
 # Info-Hub 部署与回退
 
+2026-10-23已按用户要求停用并清除云端新闻、缓存及历史数据库备份，原应用／数据库容器和卷已删除，域名返回410。下文旧备份路径不能再用于恢复新闻数据；当前仅保留受保护的配置／最小费用记录。详见[停用与环境检查](retirement-20261023.md)。后续恢复须作为重新部署处理。
+
 当前目标：`news.blian117.dpdns.org` → `43.128.10.41`，服务器主机名 `VM-0-4-opencloudos`。2026-10-10 已上线，全站及订阅需要认证。共享 Nginx 主配置、`bedrock117.dpdns.org`、PHP、MySQL、trendradar-postgres 及其数据目录均不在改造范围。
 
 2026-10-17 20:02，经确认发布`aec9d94b95c9fbf1c0dacd51ae0530ed251ea7d6`并关闭云端AI总开关；API／web／worker及current一致，采集和阅读保持开启。运行配置、预算、模型、35启用／25暂停来源及RSSHub容器未变。备份`/opt/infohub/shared/backups/ai-control-20261017T120213Z`，操作与回退注意事项见[AI运行控制](ai-control.md)。下文上午的应用版本和“处理恢复”是此前记录。
